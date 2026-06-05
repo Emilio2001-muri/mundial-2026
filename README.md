@@ -1,8 +1,7 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ⚽ Mundial 2026 — La Quiniela Premium
 
-## Getting Started
-
-First, run the development server:
+Plataforma privada de predicciones para el Mundial de Fútbol 2026.
+8 participantes, 104 partidos, puntuación en tiempo real, diseño mobile-first premium.
 
 ```bash
 npm run dev
