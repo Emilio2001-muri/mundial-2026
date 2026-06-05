@@ -6,12 +6,13 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { motion, AnimatePresence } from 'framer-motion'
 import { loginSchema, registerSchema, type LoginValues, type RegisterValues } from '@/types/forms'
 import { createClient } from '@/lib/supabase/client'
+import { registerUser } from '@/app/actions/auth'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AlertTriangle, User, Lock, UserPlus, LogIn } from 'lucide-react'
 
-// Converts a display name to a deterministic email for Supabase Auth
+// Converts display name to internal email for Supabase Auth (login only)
 function toInternalEmail(name: string): string {
   const slug = name
     .toLowerCase()
@@ -61,37 +62,25 @@ export default function LoginPage() {
     setError(null)
     setSuccess(null)
     startTransition(async () => {
-      const email = toInternalEmail(values.display_name)
-      const { data: existing } = await supabase
-        .from('profiles')
-        .select('id')
-        .ilike('display_name', values.display_name)
-        .maybeSingle()
-      if (existing) {
-        setError('Ese nombre ya está en uso. Elige otro.')
+      // Server action creates user with email_confirm:true (no email needed)
+      const result = await registerUser(values.display_name, values.password)
+      if (result.error) {
+        setError(result.error)
         return
       }
-      const { data, error } = await supabase.auth.signUp({
-        email,
+      // Auto sign-in after successful registration
+      const { error: loginError } = await supabase.auth.signInWithPassword({
+        email: result.email!,
         password: values.password,
-        options: { data: { display_name: values.display_name } },
       })
-      if (error) {
-        if (error.message?.includes('already registered')) {
-          setError('Ese nombre ya está en uso. Elige otro.')
-        } else {
-          setError(error.message ?? 'Error al crear la cuenta.')
-        }
-        return
-      }
-      if (data.session) {
-        router.push('/dashboard')
-        router.refresh()
-      } else {
-        setSuccess('¡Cuenta creada! Ahora inicia sesión.')
+      if (loginError) {
+        setSuccess('¡Cuenta creada! Ahora inicia sesión con tu nombre.')
         setTab('login')
         registerForm.reset()
         loginForm.setValue('username', values.display_name)
+      } else {
+        router.push('/dashboard')
+        router.refresh()
       }
     })
   }
