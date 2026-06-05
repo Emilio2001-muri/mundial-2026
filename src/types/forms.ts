@@ -35,11 +35,22 @@ export const globalPredictionFormSchema = z.object({
 export type GlobalPredictionFormValues = z.infer<typeof globalPredictionFormSchema>
 
 export const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
+  username: z.string().min(2, 'Mínimo 2 caracteres').max(40),
+  password: z.string().min(6, 'Mínimo 6 caracteres'),
 })
 
 export type LoginValues = z.infer<typeof loginSchema>
+
+export const registerSchema = z.object({
+  display_name: z.string().min(2, 'Mínimo 2 caracteres').max(40, 'Máximo 40 caracteres'),
+  password: z.string().min(6, 'Mínimo 6 caracteres'),
+  confirm_password: z.string().min(6),
+}).refine((d) => d.password === d.confirm_password, {
+  message: 'Las contraseñas no coinciden',
+  path: ['confirm_password'],
+})
+
+export type RegisterValues = z.infer<typeof registerSchema>
 
 export const scoringRuleSchema = z.object({
   key: z.string().min(1),

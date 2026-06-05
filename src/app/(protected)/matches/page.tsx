@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { MatchesClient } from './MatchesClient'
 
+export const revalidate = 30
+
 export default async function MatchesPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

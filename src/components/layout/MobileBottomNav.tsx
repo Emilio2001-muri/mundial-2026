@@ -8,16 +8,16 @@ import {
   Calendar,
   Trophy,
   Globe,
-  BarChart3,
+  GitBranch,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
-  { href: '/dashboard', icon: LayoutDashboard, label: 'Inicio' },
-  { href: '/matches', icon: Calendar, label: 'Partidos' },
-  { href: '/leaderboard', icon: Trophy, label: 'Ranking' },
-  { href: '/global-predictions', icon: Globe, label: 'Global' },
-  { href: '/stats', icon: BarChart3, label: 'Stats' },
+  { href: '/dashboard',           icon: LayoutDashboard, label: 'Inicio' },
+  { href: '/matches',             icon: Calendar,        label: 'Partidos' },
+  { href: '/bracket',             icon: GitBranch,       label: 'Llave' },
+  { href: '/leaderboard',         icon: Trophy,          label: 'Ranking' },
+  { href: '/global-predictions',  icon: Globe,           label: 'Global' },
 ]
 
 export function MobileBottomNav() {

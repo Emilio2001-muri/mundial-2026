@@ -3,40 +3,95 @@
 import { useState, useTransition } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { motion } from 'framer-motion'
-import { loginSchema, type LoginValues } from '@/types/forms'
+import { motion, AnimatePresence } from 'framer-motion'
+import { loginSchema, registerSchema, type LoginValues, type RegisterValues } from '@/types/forms'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, User, Lock, UserPlus, LogIn } from 'lucide-react'
+
+// Converts a display name to a deterministic email for Supabase Auth
+function toInternalEmail(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '_')
+    .replace(/[^a-z0-9_.]/g, '')
+    .slice(0, 40) || 'user'
+  return `${slug}@mundial2026.app`
+}
 
 export default function LoginPage() {
+  const [tab, setTab] = useState<'login' | 'register'>('login')
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<LoginValues>({
+  // ── Login form ──────────────────────────────────────────────────
+  const loginForm = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
   })
 
-  const onSubmit = async (values: LoginValues) => {
+  const onLogin = async (values: LoginValues) => {
     setError(null)
     startTransition(async () => {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: values.email,
-        password: values.password,
-      })
+      const email = values.username.includes('@')
+        ? values.username
+        : toInternalEmail(values.username)
+      const { error } = await supabase.auth.signInWithPassword({ email, password: values.password })
       if (error) {
-        setError('Email o contraseña incorrectos.')
+        setError('Nombre de usuario o contraseña incorrectos.')
       } else {
         router.push('/dashboard')
         router.refresh()
+      }
+    })
+  }
+
+  // ── Register form ───────────────────────────────────────────────
+  const registerForm = useForm<RegisterValues>({
+    resolver: zodResolver(registerSchema),
+  })
+
+  const onRegister = async (values: RegisterValues) => {
+    setError(null)
+    setSuccess(null)
+    startTransition(async () => {
+      const email = toInternalEmail(values.display_name)
+      const { data: existing } = await supabase
+        .from('profiles')
+        .select('id')
+        .ilike('display_name', values.display_name)
+        .maybeSingle()
+      if (existing) {
+        setError('Ese nombre ya está en uso. Elige otro.')
+        return
+      }
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password: values.password,
+        options: { data: { display_name: values.display_name } },
+      })
+      if (error) {
+        if (error.message?.includes('already registered')) {
+          setError('Ese nombre ya está en uso. Elige otro.')
+        } else {
+          setError(error.message ?? 'Error al crear la cuenta.')
+        }
+        return
+      }
+      if (data.session) {
+        router.push('/dashboard')
+        router.refresh()
+      } else {
+        setSuccess('¡Cuenta creada! Ahora inicia sesión.')
+        setTab('login')
+        registerForm.reset()
+        loginForm.setValue('username', values.display_name)
       }
     })
   }
@@ -56,58 +111,134 @@ export default function LoginPage() {
           <p className="text-muted-foreground text-sm">La quiniela más premium del torneo</p>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium" htmlFor="email">Email</label>
-            <Input
-              id="email"
-              type="email"
-              autoComplete="email"
-              placeholder="tu@email.com"
-              {...register('email')}
-            />
-            {errors.email && (
-              <p className="text-xs text-destructive">{errors.email.message}</p>
-            )}
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium" htmlFor="password">Contraseña</label>
-            <Input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              placeholder="••••••••"
-              {...register('password')}
-            />
-            {errors.password && (
-              <p className="text-xs text-destructive">{errors.password.message}</p>
-            )}
-          </div>
-
-          {error && (
-            <div className="flex items-center gap-2 rounded-xl bg-destructive/10 border border-destructive/20 p-3">
-              <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0" />
-              <p className="text-sm text-destructive">{error}</p>
-            </div>
-          )}
-
-          <Button
-            type="submit"
-            variant="gradient"
-            size="lg"
-            className="w-full"
-            loading={isPending}
+        {/* Tabs */}
+        <div className="flex rounded-xl bg-muted p-1 gap-1">
+          <button
+            type="button"
+            onClick={() => { setTab('login'); setError(null); setSuccess(null) }}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-semibold rounded-lg transition-colors ${
+              tab === 'login' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'
+            }`}
           >
-            Entrar
-          </Button>
-        </form>
+            <LogIn className="w-3.5 h-3.5" /> Entrar
+          </button>
+          <button
+            type="button"
+            onClick={() => { setTab('register'); setError(null); setSuccess(null) }}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-semibold rounded-lg transition-colors ${
+              tab === 'register' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <UserPlus className="w-3.5 h-3.5" /> Crear cuenta
+          </button>
+        </div>
+
+        {/* Forms */}
+        <AnimatePresence mode="wait">
+          {tab === 'login' ? (
+            <motion.form
+              key="login"
+              initial={{ opacity: 0, x: -16 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 16 }}
+              transition={{ duration: 0.2 }}
+              onSubmit={loginForm.handleSubmit(onLogin)}
+              className="space-y-4"
+            >
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium flex items-center gap-1.5" htmlFor="username">
+                  <User className="w-3.5 h-3.5" /> Nombre de usuario
+                </label>
+                <Input id="username" type="text" autoComplete="username" placeholder="tu nombre"
+                  {...loginForm.register('username')} />
+                {loginForm.formState.errors.username && (
+                  <p className="text-xs text-destructive">{loginForm.formState.errors.username.message}</p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium flex items-center gap-1.5" htmlFor="login_password">
+                  <Lock className="w-3.5 h-3.5" /> Contraseña
+                </label>
+                <Input id="login_password" type="password" autoComplete="current-password" placeholder="••••••••"
+                  {...loginForm.register('password')} />
+                {loginForm.formState.errors.password && (
+                  <p className="text-xs text-destructive">{loginForm.formState.errors.password.message}</p>
+                )}
+              </div>
+              {success && (
+                <div className="rounded-xl bg-green-500/10 border border-green-500/20 p-3">
+                  <p className="text-sm text-green-600 dark:text-green-400">{success}</p>
+                </div>
+              )}
+              {error && <ErrorBanner message={error} />}
+              <Button type="submit" variant="gradient" size="lg" className="w-full" loading={isPending}>
+                Entrar
+              </Button>
+            </motion.form>
+          ) : (
+            <motion.form
+              key="register"
+              initial={{ opacity: 0, x: 16 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -16 }}
+              transition={{ duration: 0.2 }}
+              onSubmit={registerForm.handleSubmit(onRegister)}
+              className="space-y-4"
+            >
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium flex items-center gap-1.5" htmlFor="display_name">
+                  <User className="w-3.5 h-3.5" /> Tu nombre (visible para todos)
+                </label>
+                <Input id="display_name" type="text" autoComplete="nickname"
+                  placeholder="ej. Emilio, ElMáquina…"
+                  {...registerForm.register('display_name')} />
+                {registerForm.formState.errors.display_name && (
+                  <p className="text-xs text-destructive">{registerForm.formState.errors.display_name.message}</p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium flex items-center gap-1.5" htmlFor="reg_password">
+                  <Lock className="w-3.5 h-3.5" /> Contraseña
+                </label>
+                <Input id="reg_password" type="password" autoComplete="new-password"
+                  placeholder="mínimo 6 caracteres"
+                  {...registerForm.register('password')} />
+                {registerForm.formState.errors.password && (
+                  <p className="text-xs text-destructive">{registerForm.formState.errors.password.message}</p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium flex items-center gap-1.5" htmlFor="confirm_password">
+                  <Lock className="w-3.5 h-3.5" /> Confirmar contraseña
+                </label>
+                <Input id="confirm_password" type="password" autoComplete="new-password"
+                  placeholder="repite tu contraseña"
+                  {...registerForm.register('confirm_password')} />
+                {registerForm.formState.errors.confirm_password && (
+                  <p className="text-xs text-destructive">{registerForm.formState.errors.confirm_password.message}</p>
+                )}
+              </div>
+              {error && <ErrorBanner message={error} />}
+              <Button type="submit" variant="gradient" size="lg" className="w-full" loading={isPending}>
+                Crear cuenta
+              </Button>
+            </motion.form>
+          )}
+        </AnimatePresence>
 
         <p className="text-center text-xs text-muted-foreground">
           Plataforma privada · Solo usuarios invitados
         </p>
       </motion.div>
+    </div>
+  )
+}
+
+function ErrorBanner({ message }: { message: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-xl bg-destructive/10 border border-destructive/20 p-3">
+      <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0" />
+      <p className="text-sm text-destructive">{message}</p>
     </div>
   )
 }

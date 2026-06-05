@@ -181,7 +181,7 @@ export function MatchPredictionForm({
             const showHome = homePlayers.length > 0 && homeScore > 0
             const showAway = awayPlayers.length > 0 && awayScore > 0
 
-            if (!showHome && !showAway) return null
+            if (!showHome && !showAway) return <></>
 
             return (
               <Card>

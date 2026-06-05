@@ -26,13 +26,19 @@ export function MatchesClient({ matches }: MatchesClientProps) {
 
   const phases = PHASES.filter((p) => matches.some((m) => m.phase === p))
 
+  const normalize = (s: string) =>
+    s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
   const filtered = matches.filter((m) => {
     if (activePhase !== 'all' && m.phase !== activePhase) return false
-    if (search) {
-      const q = search.toLowerCase()
-      const home = (m.home_team?.fifa_code ?? m.home_placeholder ?? '').toLowerCase()
-      const away = (m.away_team?.fifa_code ?? m.away_placeholder ?? '').toLowerCase()
-      if (!home.includes(q) && !away.includes(q)) return false
+    if (search.trim()) {
+      const q = normalize(search)
+      const home  = normalize(m.home_team?.name ?? m.home_team?.fifa_code ?? m.home_placeholder ?? '')
+      const hCode = normalize(m.home_team?.fifa_code ?? '')
+      const away  = normalize(m.away_team?.name ?? m.away_team?.fifa_code ?? m.away_placeholder ?? '')
+      const aCode = normalize(m.away_team?.fifa_code ?? '')
+      const venue = normalize(m.venue?.city ?? '')
+      if (!home.includes(q) && !away.includes(q) && !hCode.includes(q) && !aCode.includes(q) && !venue.includes(q)) return false
     }
     return true
   })
@@ -48,7 +54,7 @@ export function MatchesClient({ matches }: MatchesClientProps) {
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-black">Partidos</h1>
-        <p className="text-muted-foreground text-sm">104 partidos · Mundial 2026</p>
+        <p className="text-muted-foreground text-sm">{matches.length} partidos · Mundial 2026</p>
       </div>
 
       {/* Search */}
