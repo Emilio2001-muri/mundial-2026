@@ -31,10 +31,10 @@ select
 from (values
   -- ── MATCHDAY 1 ─────────────────────────────────────────────────
   -- June 11-12
-  ( 1,'A','CZE','MEX','Estadio Azteca',       '2026-06-11T18:00:00Z'),
-  ( 2,'D','TUR','USA','AT&T Stadium',          '2026-06-11T21:00:00Z'),
-  ( 3,'A','RSA','KOR','Arrowhead Stadium',     '2026-06-12T00:00:00Z'),
-  ( 4,'D','AUS','PAR','NRG Stadium',           '2026-06-12T03:00:00Z'),
+  ( 1,'A','MEX','RSA','Estadio Azteca',       '2026-06-11T20:00:00Z'),
+  ( 2,'D','TUR','USA','AT&T Stadium',          '2026-06-12T00:00:00Z'),
+  ( 3,'A','KOR','CZE','Arrowhead Stadium',     '2026-06-12T03:00:00Z'),
+  ( 4,'D','AUS','PAR','NRG Stadium',           '2026-06-13T02:00:00Z'),
   -- June 12-13
   ( 5,'B','BIH','CAN','BMO Field',             '2026-06-12T18:00:00Z'),
   ( 6,'E','CUW','ECU','Lincoln Financial Field','2026-06-12T21:00:00Z'),

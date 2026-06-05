@@ -1,5 +1,75 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+
+// ── Guard: only admins ───────────────────────────────────────────
+async function requireAdmin() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  if (profile?.role !== 'admin') redirect('/dashboard')
+  return supabase
+}
+
+// ── Delete a match prediction (and its scorer_predictions) ───────
+export async function deleteMatchPrediction(formData: FormData) {
+  const supabase = await requireAdmin()
+  const id = formData.get('prediction_id') as string
+  await supabase.from('scorer_predictions').delete().eq('prediction_id', id)
+  await supabase.from('match_predictions').delete().eq('id', id)
+  revalidatePath('/admin')
+}
+
+// ── Clear a prediction comment only ─────────────────────────────
+export async function clearPredictionComment(formData: FormData) {
+  const supabase = await requireAdmin()
+  const id = formData.get('prediction_id') as string
+  await supabase.from('match_predictions').update({ comment: null }).eq('id', id)
+  revalidatePath('/admin')
+}
+
+// ── Update match result ──────────────────────────────────────────
+export async function updateMatchResult(formData: FormData) {
+  const supabase = await requireAdmin()
+  const matchId = formData.get('match_id') as string
+  const homeScore = parseInt(formData.get('home_score') as string, 10)
+  const awayScore = parseInt(formData.get('away_score') as string, 10)
+  const status = formData.get('status') as string
+
+  await supabase.from('matches').update({
+    home_score: isNaN(homeScore) ? null : homeScore,
+    away_score: isNaN(awayScore) ? null : awayScore,
+    status,
+  }).eq('id', matchId)
+
+  revalidatePath('/admin/matches')
+  revalidatePath('/matches')
+  revalidatePath('/bracket')
+}
+
+// ── Update user role ─────────────────────────────────────────────
+export async function updateUserRole(formData: FormData) {
+  const supabase = await requireAdmin()
+  const userId = formData.get('user_id') as string
+  const role = formData.get('role') as string
+  await supabase.from('profiles').update({ role }).eq('id', userId)
+  revalidatePath('/admin/users')
+}
+
+// ── Delete user ──────────────────────────────────────────────────
+export async function deleteUser(formData: FormData) {
+  await requireAdmin()
+  const admin = createAdminClient()
+  const userId = formData.get('user_id') as string
+  await admin.auth.admin.deleteUser(userId)
+  revalidatePath('/admin/users')
+}
+
+
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getFootballDataProvider } from '@/lib/football-data'

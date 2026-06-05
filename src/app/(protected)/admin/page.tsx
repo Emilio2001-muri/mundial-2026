@@ -1,6 +1,31 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import { deleteMatchPrediction, clearPredictionComment } from '@/app/actions/admin'
+
+export const revalidate = 0
+
+export default async function AdminPage() {
+  return (
+    <div className="space-y-4">
+      <h1 className="text-xl font-black">Panel Admin</h1>
+      <div className="grid grid-cols-2 gap-3">
+        {[
+          { href: '/admin/matches', label: '⚽ Partidos',      desc: 'Actualizar resultados' },
+          { href: '/admin/users',   label: '👥 Usuarios',      desc: 'Gestionar usuarios' },
+          { href: '/admin/scoring', label: '📊 Scoring',       desc: 'Reglas de puntuación' },
+          { href: '/admin/audit',   label: '🗳 Predicciones',  desc: 'Borrar comentarios/predicciones' },
+        ].map(item => (
+          <Link key={item.href} href={item.href}
+            className="rounded-2xl border border-border bg-card p-4 hover:bg-muted/50 transition-colors">
+            <p className="font-bold text-sm">{item.label}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p>
+          </Link>
+        ))}
+      </div>
+    </div>
+  )
+}
 import { Card, CardContent } from '@/components/ui/card'
 import { Shield, RefreshCw, Users, Settings, FileText, Wifi } from 'lucide-react'
 
