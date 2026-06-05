@@ -2,12 +2,11 @@
 -- Migration 005: Full WC 2026 schedule — 72 group + 32 knockout matches
 -- ================================================================
 
--- Remove 3 placeholder matches from migration 004
-delete from public.matches where id in (
-  'm0000001-0000-0000-0000-000000000001',
-  'm0000001-0000-0000-0000-000000000002',
-  'm0000001-0000-0000-0000-000000000003'
-);
+-- Remove any duplicate seed matches from migration 004 (if they exist)
+delete from public.matches
+where match_number in (1,2,3)
+  and phase = 'group'
+  and tournament_id = 'a1b2c3d4-0000-0000-0000-000000000001'::uuid;
 
 -- ── GROUP STAGE (72 matches) ──────────────────────────────────────
 -- Uses subquery joins on team fifa_code and venue name

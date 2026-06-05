@@ -34,22 +34,22 @@ on conflict (key) do update set points = excluded.points, description = excluded
 
 -- ── Venues ───────────────────────────────────────────────────────
 insert into public.venues (id, name, city, country, timezone) values
-  ('v1000000-0000-0000-0000-000000000001', 'MetLife Stadium',        'East Rutherford', 'USA',    'America/New_York'),
-  ('v1000000-0000-0000-0000-000000000002', 'AT&T Stadium',           'Arlington',       'USA',    'America/Chicago'),
-  ('v1000000-0000-0000-0000-000000000003', 'SoFi Stadium',           'Inglewood',       'USA',    'America/Los_Angeles'),
-  ('v1000000-0000-0000-0000-000000000004', 'Estadio Azteca',         'Ciudad de México','Mexico', 'America/Mexico_City'),
-  ('v1000000-0000-0000-0000-000000000005', 'Estadio BBVA',           'Monterrey',       'Mexico', 'America/Monterrey'),
-  ('v1000000-0000-0000-0000-000000000006', 'BC Place',               'Vancouver',       'Canada', 'America/Vancouver'),
-  ('v1000000-0000-0000-0000-000000000007', 'BMO Field',              'Toronto',         'Canada', 'America/Toronto'),
-  ('v1000000-0000-0000-0000-000000000008', 'Arrowhead Stadium',      'Kansas City',     'USA',    'America/Chicago'),
-  ('v1000000-0000-0000-0000-000000000009', 'Gillette Stadium',       'Foxborough',      'USA',    'America/New_York'),
-  ('v1000000-0000-0000-0000-000000000010', 'Levi''s Stadium',        'Santa Clara',     'USA',    'America/Los_Angeles'),
-  ('v1000000-0000-0000-0000-000000000011', 'Lincoln Financial Field','Philadelphia',    'USA',    'America/New_York'),
-  ('v1000000-0000-0000-0000-000000000012', 'Allegiant Stadium',      'Las Vegas',       'USA',    'America/Los_Angeles'),
-  ('v1000000-0000-0000-0000-000000000013', 'NRG Stadium',            'Houston',         'USA',    'America/Chicago'),
-  ('v1000000-0000-0000-0000-000000000014', 'Estadio Jalisco',        'Guadalajara',     'Mexico', 'America/Mazatlan'),
-  ('v1000000-0000-0000-0000-000000000015', 'Stade Saputo',           'Montreal',        'Canada', 'America/Toronto'),
-  ('v1000000-0000-0000-0000-000000000016', 'Mercedes-Benz Stadium',  'Atlanta',         'USA',    'America/New_York')
+  ('e1000000-0000-0000-0000-000000000001', 'MetLife Stadium',        'East Rutherford', 'USA',    'America/New_York'),
+  ('e1000000-0000-0000-0000-000000000002', 'AT&T Stadium',           'Arlington',       'USA',    'America/Chicago'),
+  ('e1000000-0000-0000-0000-000000000003', 'SoFi Stadium',           'Inglewood',       'USA',    'America/Los_Angeles'),
+  ('e1000000-0000-0000-0000-000000000004', 'Estadio Azteca',         'Ciudad de México','Mexico', 'America/Mexico_City'),
+  ('e1000000-0000-0000-0000-000000000005', 'Estadio BBVA',           'Monterrey',       'Mexico', 'America/Monterrey'),
+  ('e1000000-0000-0000-0000-000000000006', 'BC Place',               'Vancouver',       'Canada', 'America/Vancouver'),
+  ('e1000000-0000-0000-0000-000000000007', 'BMO Field',              'Toronto',         'Canada', 'America/Toronto'),
+  ('e1000000-0000-0000-0000-000000000008', 'Arrowhead Stadium',      'Kansas City',     'USA',    'America/Chicago'),
+  ('e1000000-0000-0000-0000-000000000009', 'Gillette Stadium',       'Foxborough',      'USA',    'America/New_York'),
+  ('e1000000-0000-0000-0000-000000000010', 'Levi''s Stadium',        'Santa Clara',     'USA',    'America/Los_Angeles'),
+  ('e1000000-0000-0000-0000-000000000011', 'Lincoln Financial Field','Philadelphia',    'USA',    'America/New_York'),
+  ('e1000000-0000-0000-0000-000000000012', 'Allegiant Stadium',      'Las Vegas',       'USA',    'America/Los_Angeles'),
+  ('e1000000-0000-0000-0000-000000000013', 'NRG Stadium',            'Houston',         'USA',    'America/Chicago'),
+  ('e1000000-0000-0000-0000-000000000014', 'Estadio Jalisco',        'Guadalajara',     'Mexico', 'America/Mazatlan'),
+  ('e1000000-0000-0000-0000-000000000015', 'Stade Saputo',           'Montreal',        'Canada', 'America/Toronto'),
+  ('e1000000-0000-0000-0000-000000000016', 'Mercedes-Benz Stadium',  'Atlanta',         'USA',    'America/New_York')
 on conflict do nothing;
 
 -- ================================================================
@@ -511,44 +511,4 @@ insert into public.players (team_id,name,position,shirt_number) select t.id,v.na
 (21,'César Yanis','MF'),(22,'Orlando Mosquera','GK'),(23,'Michael Amir Murillo','DF'),(24,'Azarias Londoño','FW'),(25,'Roderick Miller','DF'),(26,'Jorge Gutiérrez','DF')
 ) as v(num,name,pos) where t.fifa_code='PAN' on conflict do nothing;
 
--- ================================================================
--- Sample matches (3 opening group matches)
--- ================================================================
-insert into public.matches (id, tournament_id, match_number, phase, group_name,
-  home_team_id, away_team_id, venue_id, kickoff_at, status)
-select
-  'm0000001-0000-0000-0000-000000000001',
-  'a1b2c3d4-0000-0000-0000-000000000001',
-  1, 'group', 'D',
-  (select id from public.teams where fifa_code='MEX'),
-  (select id from public.teams where fifa_code='USA'),
-  'v1000000-0000-0000-0000-000000000004',
-  '2026-06-11T20:00:00Z',
-  'scheduled'
-where not exists (select 1 from public.matches where id='m0000001-0000-0000-0000-000000000001');
-
-insert into public.matches (id, tournament_id, match_number, phase, group_name,
-  home_team_id, away_team_id, venue_id, kickoff_at, status)
-select
-  'm0000001-0000-0000-0000-000000000002',
-  'a1b2c3d4-0000-0000-0000-000000000001',
-  2, 'group', 'J',
-  (select id from public.teams where fifa_code='ARG'),
-  (select id from public.teams where fifa_code='ALG'),
-  'v1000000-0000-0000-0000-000000000013',
-  '2026-06-12T00:00:00Z',
-  'scheduled'
-where not exists (select 1 from public.matches where id='m0000001-0000-0000-0000-000000000002');
-
-insert into public.matches (id, tournament_id, match_number, phase, group_name,
-  home_team_id, away_team_id, venue_id, kickoff_at, status)
-select
-  'm0000001-0000-0000-0000-000000000003',
-  'a1b2c3d4-0000-0000-0000-000000000001',
-  3, 'group', 'H',
-  (select id from public.teams where fifa_code='ESP'),
-  (select id from public.teams where fifa_code='URU'),
-  'v1000000-0000-0000-0000-000000000016',
-  '2026-06-12T23:00:00Z',
-  'scheduled'
-where not exists (select 1 from public.matches where id='m0000001-0000-0000-0000-000000000003');
+-- (sample matches removed; run migration 005 for full schedule)

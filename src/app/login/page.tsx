@@ -227,7 +227,7 @@ export default function LoginPage() {
         </AnimatePresence>
 
         <p className="text-center text-xs text-muted-foreground">
-          Plataforma privada · Solo usuarios invitados
+          Crea tu cuenta con un nombre y contraseña · Sin email necesario
         </p>
       </motion.div>
     </div>
