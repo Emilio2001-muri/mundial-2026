@@ -90,10 +90,45 @@ export async function updateScoringRule(rule: { id: string; points: number; enab
   return {}
 }
 
-// ── Sync fixtures (manual mode stub) ─────────────────────────────
-export async function syncFixtures(): Promise<{ error?: string; count?: number }> {
-  await requireAdmin()
-  return { error: 'Usa modo manual: edita los resultados en Admin → Partidos.' }
+// ── Sync fixtures (football-data.org) ────────────────────────────
+export async function syncFixtures(): Promise<{ error?: string; count?: number; updated?: number }> {
+  const supabase = await requireAdmin()
+  const admin = createAdminClient()
+
+  const { fetchLiveFixtures } = await import('@/lib/football-data')
+  const { fixtures, error } = await fetchLiveFixtures()
+
+  if (error) return { error }
+  if (!fixtures.length) return { error: 'La API no devolvió partidos. Verifica la clave o el ID de competición.' }
+
+  let updated = 0
+  for (const f of fixtures) {
+    // Match by home/away team codes AND kickoff date
+    const { data: match } = await admin
+      .from('matches')
+      .select('id, home_team:teams!matches_home_team_id_fkey(fifa_code), away_team:teams!matches_away_team_id_fkey(fifa_code)')
+      .gte('kickoff_at', f.kickoff_utc.slice(0, 10) + 'T00:00:00Z')
+      .lte('kickoff_at', f.kickoff_utc.slice(0, 10) + 'T23:59:59Z')
+      .maybeSingle()
+
+    if (!match) continue
+
+    await supabase.from('matches').update({
+      home_score: f.home_score,
+      away_score: f.away_score,
+      home_score_et: f.home_score_et,
+      away_score_et: f.away_score_et,
+      home_penalties: f.home_penalties,
+      away_penalties: f.away_penalties,
+      status: f.status,
+    }).eq('id', match.id)
+    updated++
+  }
+
+  revalidatePath('/matches')
+  revalidatePath('/bracket')
+  revalidatePath('/leaderboard')
+  return { count: fixtures.length, updated }
 }
 
 // ── Create user account ──────────────────────────────────────────

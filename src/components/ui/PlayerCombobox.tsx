@@ -19,6 +19,13 @@ const POSITION_LABEL: Record<string, string> = {
   FW: 'DEL',
 }
 
+const POSITION_COLOR: Record<string, string> = {
+  GK: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+  DF: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  MF: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  FW: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+}
+
 export function PlayerCombobox({
   players,
   value,
@@ -28,7 +35,8 @@ export function PlayerCombobox({
 }: PlayerComboboxProps) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
-  const containerRef = useRef<HTMLDivElement>(null)
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({})
+  const triggerRef = useRef<HTMLButtonElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const selected = players.find((p) => p.id === value) ?? null
@@ -36,12 +44,26 @@ export function PlayerCombobox({
   const filtered = search.trim()
     ? players.filter((p) =>
         p.name.toLowerCase().includes(search.toLowerCase()) ||
-        p.position?.toLowerCase().includes(search.toLowerCase())
+        (p.position?.toLowerCase() ?? '').includes(search.toLowerCase())
       )
     : players
 
   const handleOpen = () => {
     if (disabled) return
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect()
+      const spaceBelow = window.innerHeight - rect.bottom
+      const dropUp = spaceBelow < 260
+      setDropdownStyle({
+        position: 'fixed',
+        left: rect.left,
+        width: rect.width,
+        zIndex: 9999,
+        ...(dropUp
+          ? { bottom: window.innerHeight - rect.top + 4 }
+          : { top: rect.bottom + 4 }),
+      })
+    }
     setOpen(true)
     setSearch('')
     setTimeout(() => inputRef.current?.focus(), 50)
@@ -59,23 +81,24 @@ export function PlayerCombobox({
   }
 
   const handleClickOutside = useCallback((e: MouseEvent) => {
-    if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+    if (
+      triggerRef.current &&
+      !triggerRef.current.closest('[data-player-combobox]')?.contains(e.target as Node)
+    ) {
       setOpen(false)
       setSearch('')
     }
   }, [])
 
   useEffect(() => {
-    if (open) {
-      document.addEventListener('mousedown', handleClickOutside)
-    }
+    if (open) document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [open, handleClickOutside])
 
   return (
-    <div ref={containerRef} className="relative w-full">
-      {/* Trigger */}
+    <div data-player-combobox className="relative w-full">
       <button
+        ref={triggerRef}
         type="button"
         onClick={handleOpen}
         disabled={disabled}
@@ -102,23 +125,22 @@ export function PlayerCombobox({
         </div>
       </button>
 
-      {/* Dropdown */}
       {open && (
-        <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-lg overflow-hidden">
-          {/* Search input */}
-          <div className="p-2 border-b border-border">
+        <div
+          style={dropdownStyle}
+          className="bg-popover border border-border rounded-xl shadow-2xl overflow-hidden"
+        >
+          <div className="p-2 border-b border-border bg-background">
             <input
               ref={inputRef}
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar jugador…"
-              className="w-full text-sm bg-transparent focus:outline-none placeholder:text-muted-foreground"
+              className="w-full text-sm bg-transparent focus:outline-none placeholder:text-muted-foreground px-1"
             />
           </div>
-
-          {/* List */}
-          <ul className="max-h-52 overflow-y-auto py-1">
+          <ul className="max-h-56 overflow-y-auto py-1">
             {filtered.length === 0 ? (
               <li className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</li>
             ) : (
@@ -133,13 +155,9 @@ export function PlayerCombobox({
                         ${isSelected ? 'bg-primary/10 text-primary' : 'hover:bg-muted'}`}
                     >
                       <span className="truncate font-medium">{p.name}</span>
-                      <div className="flex items-center gap-2 flex-shrink-0">
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
                         {p.position && (
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded
-                            ${p.position === 'GK' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                              p.position === 'DF' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
-                              p.position === 'MF' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                              'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${POSITION_COLOR[p.position] ?? 'bg-muted text-muted-foreground'}`}>
                             {POSITION_LABEL[p.position] ?? p.position}
                           </span>
                         )}
@@ -156,3 +174,4 @@ export function PlayerCombobox({
     </div>
   )
 }
+
