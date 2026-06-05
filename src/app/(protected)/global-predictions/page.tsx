@@ -26,10 +26,9 @@ export default async function GlobalPredictionsPage() {
 
   return (
     <GlobalPredictionsClient
-      tournament={tournament as Tournament | null}
+      existingPrediction={existing as GlobalPrediction | null}
       teams={(teams ?? []) as Team[]}
       players={(players ?? []) as Player[]}
-      existing={existing as GlobalPrediction | null}
       locked={locked}
     />
   )
