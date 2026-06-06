@@ -63,7 +63,7 @@ function KOCard({ m }: { m: MatchWithTeams }) {
   return (
     <div className={`rounded-xl border overflow-hidden ${live ? 'border-green-500/60' : 'border-border'} bg-card`}>
       <div className={`px-2 py-0.5 text-[10px] font-semibold text-center truncate ${live ? 'bg-green-500 text-white' : 'bg-muted/50 text-muted-foreground'}`}>
-        {live ? 'EN VIVO' : played ? 'Final' : <ClientTime utcIso={m.kickoff_at} format="full" className="text-[10px]" />}
+        {live ? 'EN VIVO' : played ? 'Final' : <ClientTime utcIso={m.kickoff_at} format="short" className="text-[10px]" />}
       </div>
       <div className={`flex items-center gap-1.5 px-2 py-1.5 ${homeWin ? 'bg-primary/5' : ''}`}>
         <div className="flex items-center gap-1 flex-1 min-w-0">
