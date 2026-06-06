@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { Profile } from '@/types'
 import Link from 'next/link'
-import { formatMatchTime } from '@/lib/utils'
+import { ClientTime } from '@/components/ui/ClientTime'
 
 interface DashboardClientProps {
   profile: Profile
@@ -144,9 +144,7 @@ export function DashboardClient({
                         {match.home_team?.fifa_code ?? '?'} vs {match.away_team?.fifa_code ?? '?'}
                       </span>
                     </div>
-                    <span className="text-xs text-muted-foreground">
-                      {formatMatchTime(match.kickoff_at)}
-                    </span>
+                    <ClientTime utcIso={match.kickoff_at} className="text-xs text-muted-foreground" />
                   </CardContent>
                 </Card>
               </Link>

@@ -1,10 +1,11 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { formatMatchTime, phaseLabel } from '@/lib/utils'
+import { phaseLabel } from '@/lib/utils'
 import { isMatchLocked } from '@/lib/scoring'
 import { MatchPredictionForm } from '@/components/matches/MatchPredictionForm'
 import { LockCountdown } from '@/components/matches/LockCountdown'
+import { ClientTime } from '@/components/ui/ClientTime'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import type { MatchWithTeams, MatchPrediction, ScorerPrediction, Player, Lineup, MatchEvent } from '@/types'
@@ -79,9 +80,7 @@ export function MatchDetailClient({
                     <span className="text-4xl font-black">{match.away_score ?? 0}</span>
                   </div>
                 ) : (
-                  <span className="text-base font-bold text-muted-foreground">
-                    {formatMatchTime(match.kickoff_at, undefined, 'full')}
-                  </span>
+                  <ClientTime utcIso={match.kickoff_at} format="full" className="text-base font-bold text-muted-foreground" fallback="…" />
                 )}
                 {match.home_penalties !== null && (
                   <span className="text-xs text-muted-foreground">

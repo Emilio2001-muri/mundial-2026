@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { updateMatchResult } from '@/app/actions/admin'
 import { recalculateMatchScores } from '@/app/actions/scoring'
-import { formatMatchTime, phaseLabel } from '@/lib/utils'
+import { phaseLabel } from '@/lib/utils'
+import { ClientTime } from '@/components/ui/ClientTime'
 import { Edit, RefreshCw, Check, X } from 'lucide-react'
 
 interface AdminMatchesClientProps {
@@ -80,7 +81,7 @@ export function AdminMatchesClient({ matches }: AdminMatchesClientProps) {
                     </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {phaseLabel(match.phase)} · {formatMatchTime(match.kickoff_at)}
+                    {phaseLabel(match.phase)} · <ClientTime utcIso={match.kickoff_at} />
                   </p>
                   {match.status === 'finished' && (
                     <p className="text-sm font-bold mt-1">
