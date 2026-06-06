@@ -11,7 +11,7 @@ export default async function UserProfilePage({ params }: { params: Promise<{ id
   const supabase = await createClient()
 
   const matchPredSelect = `
-    id, predicted_home_score, predicted_away_score, created_at,
+    id, predicted_home_score, predicted_away_score, updated_at,
     match:matches(
       id, match_number, phase, kickoff_at, status, home_score, away_score,
       home_team:teams!matches_home_team_id_fkey(name, fifa_code, flag_url),
@@ -25,7 +25,7 @@ export default async function UserProfilePage({ params }: { params: Promise<{ id
     .from('match_predictions')
     .select(matchPredSelect)
     .eq('user_id', id)
-    .order('created_at', { ascending: true })
+    .order('updated_at', { ascending: true })
     .limit(104)
 
   const matchPreds = mpData ?? []
