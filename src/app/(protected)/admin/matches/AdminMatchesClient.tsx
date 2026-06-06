@@ -6,11 +6,11 @@ import type { Match, Team, Venue } from '@/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { updateMatchResult } from '@/app/actions/admin'
+import { updateMatchResult, rebuildMatchesFromAPI, syncFixtures } from '@/app/actions/admin'
 import { recalculateMatchScores } from '@/app/actions/scoring'
 import { phaseLabel } from '@/lib/utils'
 import { ClientTime } from '@/components/ui/ClientTime'
-import { Edit, RefreshCw, Check, X } from 'lucide-react'
+import { Edit, RefreshCw, Check, X, AlertTriangle, CheckCircle2, DatabaseZap } from 'lucide-react'
 
 interface AdminMatchesClientProps {
   matches: (Match & { home_team?: { fifa_code: string } | null; away_team?: { fifa_code: string } | null })[]
@@ -23,7 +23,35 @@ export function AdminMatchesClient({ matches }: AdminMatchesClientProps) {
   const [homeScore, setHomeScore] = useState(0)
   const [awayScore, setAwayScore] = useState(0)
   const [isPending, startTransition] = useTransition()
-  const [message, setMessage] = useState<string | null>(null)
+  const [isSyncing, startSync] = useTransition()
+  const [isRebuilding, startRebuild] = useTransition()
+  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null)
+
+  const handleRebuild = () => {
+    if (!confirm('⚠️ Esto eliminará todos los partidos de fase de grupos y los reconstruirá desde la API de football-data.org con los equipos y horarios reales. ¿Continuar?')) return
+    setMessage(null)
+    startRebuild(async () => {
+      const res = await rebuildMatchesFromAPI()
+      if (res.error) {
+        setMessage({ text: `Error: ${res.error}`, ok: false })
+      } else {
+        const skip = res.skipped?.length ? ` (${res.skipped.length} no encontrados: ${res.skipped.join(', ')})` : ''
+        setMessage({ text: `✅ ${res.inserted} partidos importados desde la API.${skip}`, ok: true })
+      }
+    })
+  }
+
+  const handleSync = () => {
+    setMessage(null)
+    startSync(async () => {
+      const res = await syncFixtures()
+      if (res.error) {
+        setMessage({ text: `Error sync: ${res.error}`, ok: false })
+      } else {
+        setMessage({ text: `✅ ${res.updated} marcadores actualizados de ${res.count} partidos.`, ok: true })
+      }
+    })
+  }
 
   const startEdit = (match: Match & { home_team?: { fifa_code: string } | null; away_team?: { fifa_code: string } | null }) => {
     setEditingId(match.id)
@@ -34,12 +62,13 @@ export function AdminMatchesClient({ matches }: AdminMatchesClientProps) {
 
   const saveResult = (matchId: string) => {
     startTransition(async () => {
+      setMessage(null)
       const res = await updateMatchResult(matchId, homeScore, awayScore)
       if (res.error) {
-        setMessage(`Error: ${res.error}`)
+        setMessage({ text: `Error: ${res.error}`, ok: false })
       } else {
         await recalculateMatchScores(matchId)
-        setMessage('Resultado guardado y puntos recalculados.')
+        setMessage({ text: 'Resultado guardado y puntos recalculados.', ok: true })
         setEditingId(null)
       }
     })
@@ -58,9 +87,38 @@ export function AdminMatchesClient({ matches }: AdminMatchesClientProps) {
       <a href="/admin" className="text-sm text-primary font-medium">← Admin</a>
       <h1 className="text-xl font-black">Gestión de partidos</h1>
 
+      {/* API sync buttons */}
+      <div className="grid grid-cols-2 gap-2">
+        <Button
+          variant="default"
+          onClick={handleRebuild}
+          loading={isRebuilding}
+          className="flex items-center gap-2 text-sm"
+        >
+          <DatabaseZap className="w-4 h-4" />
+          Importar desde API
+        </Button>
+        <Button
+          variant="outline"
+          onClick={handleSync}
+          loading={isSyncing}
+          className="flex items-center gap-2 text-sm"
+        >
+          <RefreshCw className="w-4 h-4" />
+          Actualizar marcadores
+        </Button>
+      </div>
+      <p className="text-[11px] text-muted-foreground px-1">
+        "Importar desde API" reconstruye todos los partidos de grupos con los equipos y horarios reales del Mundial 2026. "Actualizar marcadores" sincroniza goles y estado en vivo.
+      </p>
+
       {message && (
-        <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-3 text-sm text-emerald-700 dark:text-emerald-400">
-          {message}
+        <div className={`rounded-xl p-3 flex items-start gap-2 text-sm ${message.ok ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400' : 'bg-destructive/10 border border-destructive/20 text-destructive'}`}>
+          {message.ok
+            ? <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            : <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          }
+          {message.text}
         </div>
       )}
 

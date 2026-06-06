@@ -7,26 +7,52 @@
 const API_BASE = 'https://api.football-data.org/v4'
 const COMPETITION_ID = process.env.FOOTBALL_DATA_COMPETITION ?? '2000'
 
+// football-data.org stage → our phase name
+const STAGE_MAP: Record<string, string> = {
+  GROUP_STAGE:    'group',
+  ROUND_OF_32:    'round_of_32',
+  LAST_32:        'round_of_32',
+  ROUND_OF_16:    'round_of_16',
+  LAST_16:        'round_of_16',
+  QUARTER_FINALS: 'quarter_final',
+  SEMI_FINALS:    'semi_final',
+  THIRD_PLACE:    'third_place',
+  FINAL:          'final',
+}
+
+// Extract group letter from "GROUP_A" → "A"
+function extractGroup(group?: string | null): string | null {
+  if (!group) return null
+  const m = group.match(/GROUP_([A-L])/)
+  return m ? m[1] : null
+}
+
 interface FDMatch {
   id: number
   matchday?: number
+  stage: string
+  group?: string | null
   utcDate: string
-  status: string // SCHEDULED | LIVE | IN_PLAY | PAUSED | FINISHED | POSTPONED | CANCELLED
-  homeTeam: { tla: string; shortName: string }
-  awayTeam: { tla: string; shortName: string }
+  status: string
+  homeTeam: { tla: string; shortName: string; name: string }
+  awayTeam: { tla: string; shortName: string; name: string }
   score: {
     fullTime: { home: number | null; away: number | null }
-    extraTime: { home: number | null; away: number | null }
-    penalties: { home: number | null; away: number | null }
+    extraTime?: { home: number | null; away: number | null } | null
+    penalties?: { home: number | null; away: number | null } | null
   }
 }
 
 export interface FixtureUpdate {
   external_id: string
   kickoff_utc: string
+  phase: string
+  group_name: string | null
   status: 'scheduled' | 'live' | 'finished' | 'postponed'
   home_code: string
+  home_name: string
   away_code: string
+  away_name: string
   home_score: number | null
   away_score: number | null
   home_score_et: number | null
@@ -45,13 +71,13 @@ function mapStatus(s: string): 'scheduled' | 'live' | 'finished' | 'postponed' {
 export async function fetchLiveFixtures(): Promise<{ fixtures: FixtureUpdate[]; error?: string }> {
   const apiKey = process.env.FOOTBALL_DATA_API_KEY
   if (!apiKey) {
-    return { fixtures: [], error: 'FOOTBALL_DATA_API_KEY no configurada. Regístrate en football-data.org y agrega la clave al .env.local' }
+    return { fixtures: [], error: 'FOOTBALL_DATA_API_KEY no configurada' }
   }
 
   try {
     const res = await fetch(`${API_BASE}/competitions/${COMPETITION_ID}/matches`, {
       headers: { 'X-Auth-Token': apiKey },
-      next: { revalidate: 60 }, // cache 1 min
+      next: { revalidate: 30 },
     })
     if (!res.ok) {
       const text = await res.text()
@@ -61,9 +87,13 @@ export async function fetchLiveFixtures(): Promise<{ fixtures: FixtureUpdate[]; 
     const fixtures: FixtureUpdate[] = data.matches.map((m) => ({
       external_id: String(m.id),
       kickoff_utc: m.utcDate,
+      phase: STAGE_MAP[m.stage] ?? 'group',
+      group_name: extractGroup(m.group),
       status: mapStatus(m.status),
       home_code: m.homeTeam.tla,
+      home_name: m.homeTeam.name,
       away_code: m.awayTeam.tla,
+      away_name: m.awayTeam.name,
       home_score: m.score.fullTime.home,
       away_score: m.score.fullTime.away,
       home_score_et: m.score.extraTime?.home ?? null,
@@ -76,3 +106,4 @@ export async function fetchLiveFixtures(): Promise<{ fixtures: FixtureUpdate[]; 
     return { fixtures: [], error: String(err) }
   }
 }
+

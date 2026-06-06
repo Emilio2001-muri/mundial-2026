@@ -90,6 +90,81 @@ export async function updateScoringRule(rule: { id: string; points: number; enab
   return {}
 }
 
+// ── Rebuild all matches from football-data.org API ───────────────
+// Deletes existing group stage matches and recreates from real API data.
+// Knockout placeholders remain untouched.
+export async function rebuildMatchesFromAPI(): Promise<{ error?: string; inserted?: number; skipped?: string[] }> {
+  await requireAdmin()
+  const admin = createAdminClient()
+
+  const { fetchLiveFixtures } = await import('@/lib/football-data')
+  const { fixtures, error } = await fetchLiveFixtures()
+  if (error) return { error }
+  if (!fixtures.length) return { error: 'La API no devolvió partidos. Verifica la clave o el ID de competición (FOOTBALL_DATA_COMPETITION=2000).' }
+
+  const TOURNAMENT_ID = 'a1b2c3d4-0000-0000-0000-000000000001'
+
+  // Load all teams for lookup (by TLA code and by name)
+  const { data: teams } = await admin.from('teams').select('id, fifa_code, name')
+  const byCode: Record<string, string> = {}
+  const byName: Record<string, string> = {}
+  for (const t of teams ?? []) {
+    byCode[t.fifa_code.toUpperCase()] = t.id
+    byName[t.name.toLowerCase()] = t.id
+  }
+
+  const findTeam = (code: string, name: string): string | null => {
+    return byCode[code.toUpperCase()]
+      ?? byCode[name.toUpperCase().slice(0, 3)]
+      ?? byName[name.toLowerCase()]
+      ?? null
+  }
+
+  // Load venues for matching
+  const { data: venues } = await admin.from('venues').select('id, name').limit(20)
+  const firstVenueId = venues?.[0]?.id ?? null
+
+  // Only process group stage from API (knockout rounds are set by migration)
+  const groupFixtures = fixtures.filter(f => f.phase === 'group')
+  if (!groupFixtures.length) return { error: 'La API no tiene partidos de fase de grupos todavía.' }
+
+  // Delete existing group stage matches (and their predictions) for this tournament
+  await admin.from('matches')
+    .delete()
+    .eq('tournament_id', TOURNAMENT_ID)
+    .eq('phase', 'group')
+
+  let inserted = 0
+  const skipped: string[] = []
+
+  for (const f of groupFixtures) {
+    const homeId = findTeam(f.home_code, f.home_name)
+    const awayId = findTeam(f.away_code, f.away_name)
+
+    if (!homeId) { skipped.push(`No encontrado: ${f.home_code} (${f.home_name})`); continue }
+    if (!awayId) { skipped.push(`No encontrado: ${f.away_code} (${f.away_name})`); continue }
+
+    await admin.from('matches').insert({
+      tournament_id: TOURNAMENT_ID,
+      phase: 'group',
+      group_name: f.group_name,
+      home_team_id: homeId,
+      away_team_id: awayId,
+      venue_id: firstVenueId,
+      kickoff_at: f.kickoff_utc,
+      status: f.status,
+      home_score: f.home_score,
+      away_score: f.away_score,
+    })
+    inserted++
+  }
+
+  revalidatePath('/matches')
+  revalidatePath('/admin/matches')
+  revalidatePath('/bracket')
+  return { inserted, skipped }
+}
+
 // ── Sync fixtures (football-data.org) ────────────────────────────
 export async function syncFixtures(): Promise<{ error?: string; count?: number; updated?: number }> {
   await requireAdmin()
