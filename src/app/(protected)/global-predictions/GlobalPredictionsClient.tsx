@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useRef, useEffect, useCallback } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { motion } from 'framer-motion'
@@ -26,6 +26,8 @@ function TeamCombobox({
 }: { teams: Team[]; value: string | null; onChange: (v: string | null) => void; placeholder: string }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({})
+  const triggerRef = useRef<HTMLButtonElement>(null)
   const selected = teams.find(t => t.id === value) ?? null
 
   const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -33,11 +35,43 @@ function TeamCombobox({
     ? teams.filter(t => normalize(t.name).includes(normalize(search)) || normalize(t.fifa_code).includes(normalize(search)))
     : teams
 
+  const handleOpen = () => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect()
+      const spaceBelow = window.innerHeight - rect.bottom
+      const dropUp = spaceBelow < 260
+      setDropdownStyle({
+        position: 'fixed',
+        left: rect.left,
+        width: rect.width,
+        zIndex: 9999,
+        ...(dropUp
+          ? { bottom: window.innerHeight - rect.top + 4 }
+          : { top: rect.bottom + 4 }),
+      })
+    }
+    setOpen(o => !o)
+    setSearch('')
+  }
+
+  const handleClickOutside = useCallback((e: MouseEvent) => {
+    if (triggerRef.current && !triggerRef.current.closest('[data-team-combobox]')?.contains(e.target as Node)) {
+      setOpen(false)
+      setSearch('')
+    }
+  }, [])
+
+  useEffect(() => {
+    if (open) document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [open, handleClickOutside])
+
   return (
-    <div className="relative w-full">
+    <div data-team-combobox className="relative w-full">
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => { setOpen(o => !o); setSearch('') }}
+        onClick={handleOpen}
         className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border text-sm text-left transition-colors cursor-pointer
           ${open ? 'border-ring ring-1 ring-ring' : 'border-input'} bg-background hover:bg-muted/50`}
       >
@@ -51,7 +85,7 @@ function TeamCombobox({
         <span className="text-muted-foreground text-xs flex-shrink-0">▼</span>
       </button>
       {open && (
-        <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-lg overflow-hidden">
+        <div style={dropdownStyle} className="bg-popover border border-border rounded-lg shadow-lg overflow-hidden">
           <div className="p-2 border-b border-border">
             <input
               autoFocus

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -11,6 +11,8 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AlertTriangle, User, Lock, UserPlus, LogIn } from 'lucide-react'
+
+const REMEMBER_KEY = 'mundial2026_remembered_user'
 
 // Converts display name to internal email for Supabase Auth (login only)
 function toInternalEmail(name: string): string {
@@ -29,6 +31,7 @@ export default function LoginPage() {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [remember, setRemember] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -36,6 +39,15 @@ export default function LoginPage() {
   const loginForm = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
   })
+
+  // Pre-fill saved username on mount
+  useEffect(() => {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem(REMEMBER_KEY) : null
+    if (saved) {
+      loginForm.setValue('username', saved)
+      setRemember(true)
+    }
+  }, [loginForm])
 
   const onLogin = async (values: LoginValues) => {
     setError(null)
@@ -47,6 +59,11 @@ export default function LoginPage() {
       if (error) {
         setError('Nombre de usuario o contraseña incorrectos.')
       } else {
+        if (remember) {
+          localStorage.setItem(REMEMBER_KEY, values.username)
+        } else {
+          localStorage.removeItem(REMEMBER_KEY)
+        }
         router.push('/dashboard')
         router.refresh()
       }
@@ -153,6 +170,18 @@ export default function LoginPage() {
                 {loginForm.formState.errors.password && (
                   <p className="text-xs text-destructive">{loginForm.formState.errors.password.message}</p>
                 )}
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  id="remember"
+                  type="checkbox"
+                  checked={remember}
+                  onChange={e => setRemember(e.target.checked)}
+                  className="w-4 h-4 rounded border-input accent-primary cursor-pointer"
+                />
+                <label htmlFor="remember" className="text-sm text-muted-foreground cursor-pointer select-none">
+                  Recordarme
+                </label>
               </div>
               {success && (
                 <div className="rounded-xl bg-green-500/10 border border-green-500/20 p-3">
