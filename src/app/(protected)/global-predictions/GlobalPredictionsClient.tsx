@@ -10,14 +10,38 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { PlayerCombobox } from '@/components/ui/PlayerCombobox'
 import type { GlobalPrediction, Player, Team } from '@/types'
-import { Check, AlertTriangle, Trophy, Star, Shield, Zap, Award } from 'lucide-react'
+import { Check, AlertTriangle, Trophy, Star, Award, Clock, Lock, Pencil } from 'lucide-react'
 import { haptic } from '@/lib/utils'
+
+function Countdown({ lockAt }: { lockAt: string }) {
+  const [remaining, setRemaining] = useState('')
+
+  useEffect(() => {
+    const calc = () => {
+      const diff = new Date(lockAt).getTime() - Date.now()
+      if (diff <= 0) { setRemaining('Cerrado'); return }
+      const d = Math.floor(diff / 86400000)
+      const h = Math.floor((diff % 86400000) / 3600000)
+      const m = Math.floor((diff % 3600000) / 60000)
+      if (d > 0) setRemaining(`${d}d ${h}h ${m}m`)
+      else if (h > 0) setRemaining(`${h}h ${m}m`)
+      else setRemaining(`${m}m`)
+    }
+    calc()
+    const id = setInterval(calc, 30000)
+    return () => clearInterval(id)
+  }, [lockAt])
+
+  return <span>{remaining}</span>
+}
 
 interface GlobalPredictionsClientProps {
   existingPrediction: GlobalPrediction | null
   teams: Team[]
   players: Player[]
   locked: boolean
+  isAdmin: boolean
+  lockAt: string | null
 }
 
 // Team combobox (reuses PlayerCombobox style but for teams)
@@ -121,11 +145,15 @@ function TeamCombobox({
 }
 
 export function GlobalPredictionsClient({
-  existingPrediction, teams, players, locked,
+  existingPrediction, teams, players, locked, isAdmin, lockAt,
 }: GlobalPredictionsClientProps) {
   const [isPending, startTransition] = useTransition()
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [editing, setEditing] = useState(!existingPrediction)
+
+  // Non-admins can't re-edit after first submit — they must ask admin
+  const effectiveLocked = locked || (!isAdmin && !!existingPrediction && !editing)
 
   // Filtered player lists by position
   const goalkeepers = players.filter(p => p.position === 'GK')
@@ -193,12 +221,59 @@ export function GlobalPredictionsClient({
     },
   ]
 
+  const submittedDate = existingPrediction?.submitted_at
+    ? new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium', timeStyle: 'short' }).format(
+        new Date(existingPrediction.submitted_at),
+      )
+    : null
+
+  const updatedDate = existingPrediction?.updated_at && existingPrediction.updated_at !== existingPrediction.submitted_at
+    ? new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium', timeStyle: 'short' }).format(
+        new Date(existingPrediction.updated_at),
+      )
+    : null
+
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-black">Predicciones Globales</h1>
-        <p className="text-sm text-muted-foreground">Se cierran al inicio del torneo · 11 jun 2026</p>
+        {lockAt && !locked && (
+          <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+            <Clock className="w-3.5 h-3.5" />
+            Cierra en: <span className="font-semibold text-foreground"><Countdown lockAt={lockAt} /></span>
+          </p>
+        )}
+        {locked && (
+          <p className="text-sm text-destructive flex items-center gap-1.5">
+            <Lock className="w-3.5 h-3.5" /> Predicciones cerradas
+          </p>
+        )}
       </div>
+
+      {submittedDate && (
+        <Card className="border-green-500/30 bg-green-500/5">
+          <CardContent className="py-3 px-4 space-y-0.5">
+            <p className="text-xs text-green-700 dark:text-green-400 flex items-center gap-1.5">
+              <Check className="w-3.5 h-3.5" />
+              <span>Enviado el {submittedDate}</span>
+            </p>
+            {updatedDate && (
+              <p className="text-xs text-muted-foreground pl-5">Actualizado el {updatedDate}</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {effectiveLocked && !locked && (
+        <Card className="border-amber-500/30 bg-amber-500/5">
+          <CardContent className="py-3 px-4">
+            <p className="text-sm text-amber-700 dark:text-amber-400 font-medium flex items-center gap-2">
+              <Lock className="w-4 h-4" />
+              Predicción bloqueada. Contacta al admin para modificarla.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {locked && (
         <Card className="border-destructive/30 bg-destructive/5">
@@ -241,7 +316,7 @@ export function GlobalPredictionsClient({
                           value={f.value as string | null}
                           onChange={f.onChange}
                           placeholder="Buscar jugador…"
-                          disabled={locked}
+                          disabled={effectiveLocked}
                         />
                       )
                     )}
@@ -258,10 +333,17 @@ export function GlobalPredictionsClient({
           </p>
         )}
 
-        {!locked && (
+        {!effectiveLocked && (
           <Button type="submit" variant="gradient" size="lg" className="w-full"
-            loading={isPending} disabled={!isDirty && !!existingPrediction}>
+            loading={isPending} disabled={!isDirty}>
             {saved ? <><Check className="w-4 h-4" /> Predicciones guardadas</> : existingPrediction ? 'Actualizar predicciones' : 'Guardar predicciones globales'}
+          </Button>
+        )}
+
+        {isAdmin && !!existingPrediction && effectiveLocked && !locked && (
+          <Button type="button" variant="outline" size="sm" className="w-full"
+            onClick={() => setEditing(true)}>
+            <Pencil className="w-4 h-4 mr-2" /> Admin: modificar predicción
           </Button>
         )}
       </form>
