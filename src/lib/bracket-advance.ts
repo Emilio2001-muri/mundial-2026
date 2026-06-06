@@ -126,33 +126,63 @@ export async function advanceBracket(admin: SupabaseClient): Promise<void> {
 
   const first  = (g: string) => complete[g] ? standings[g][0]?.team_id ?? null : null
   const second = (g: string) => complete[g] ? standings[g][1]?.team_id ?? null : null
+  const third  = (g: string) => complete[g] ? standings[g][2]?.team_id ?? null : null
 
-  // R32 — standard 1st/2nd placements (match numbers from migration 006)
-  await promoteTeams(admin, 73, first('A'), second('B'))
-  await promoteTeams(admin, 74, first('C'), second('D'))
-  await promoteTeams(admin, 75, first('B'), second('A'))
-  await promoteTeams(admin, 76, first('D'), second('C'))
-  await promoteTeams(admin, 77, first('E'), null)
+  // R32 — match numbers from migration 007
+  // 73: 2A vs 2B
+  await promoteTeams(admin, 73, second('A'), second('B'))
+  // 74: 1E vs best 3rd of A/B/C/D/F  (best 3rd determined once groups done)
+  await promoteTeams(admin, 74, first('E'), null)
+  // 75: 1A vs 3rd C/D/E/F
+  await promoteTeams(admin, 75, first('A'), null)
+  // 76: 1F vs 2C
+  await promoteTeams(admin, 76, first('F'), second('C'))
+  // 77: 1I vs 3rd C/D/F/G/H
+  await promoteTeams(admin, 77, first('I'), null)
+  // 78: 1G vs 3rd A/E/H/I/J
   await promoteTeams(admin, 78, first('G'), null)
-  await promoteTeams(admin, 79, first('F'), null)
-  await promoteTeams(admin, 80, first('H'), second('F') ?? second('E') ?? second('G'))
-  await promoteTeams(admin, 81, first('I'), second('J'))
-  await promoteTeams(admin, 82, first('K'), second('L'))
-  await promoteTeams(admin, 83, first('J'), second('I'))
-  await promoteTeams(admin, 84, first('L'), second('K'))
+  // 79: 1B vs 3rd A/C/D/K/L
+  await promoteTeams(admin, 79, first('B'), null)
+  // 80: 1H vs 2J
+  await promoteTeams(admin, 80, first('H'), second('J'))
+  // 81: 1D vs 3rd B/E/F/I/J
+  await promoteTeams(admin, 81, first('D'), null)
+  // 82: 1C vs 2D
+  await promoteTeams(admin, 82, first('C'), second('D'))
+  // 83: 2K vs 2L
+  await promoteTeams(admin, 83, second('K'), second('L'))
+  // 84: 1J vs 2I
+  await promoteTeams(admin, 84, first('J'), second('I'))
+  // 85: 1K vs 3rd G/H/I/J/K/L
+  await promoteTeams(admin, 85, first('K'), null)
+  // 86: 1L vs 2K (after 83 winner)
+  await promoteTeams(admin, 86, first('L'), second('K'))
+  // 87: 2E vs 2F
+  await promoteTeams(admin, 87, second('E'), second('F'))
+  // 88: 2G vs 2H
+  await promoteTeams(admin, 88, second('G'), second('H'))
 
-  // Best 3rd-place teams (matches 85-88): only when all groups complete
+  // Best 3rd-place teams — distributed to the 7 slots that require a 3rd place team.
+  // Each 3rd place faces a 1st place team (never another 3rd).
+  // The specific 3rd → slot mapping depends on which groups produced the best thirds.
+  // We rank all 12 thirds and place them into the away slots of matches 74,75,77,78,79,81,85.
   if (GROUPS.every(g => complete[g])) {
-    const thirds = GROUPS
-      .map(g => standings[g][2])
-      .filter(Boolean)
+    const thirdsRanked = GROUPS
+      .map(g => ({ ...standings[g][2], groupName: g }))
+      .filter(t => t.team_id)
       .sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf)
-      .slice(0, 4)
-    if (thirds[0]) await promoteTeams(admin, 85, thirds[0].team_id, thirds[1]?.team_id ?? null)
-    if (thirds[2]) await promoteTeams(admin, 86, thirds[2].team_id, thirds[3]?.team_id ?? null)
+
+    // Slots that need a best-3rd as the away team
+    const thirdSlots = [74, 75, 77, 78, 79, 81, 85]
+    for (let i = 0; i < thirdSlots.length && i < thirdsRanked.length; i++) {
+      const slot = await getKOMatch(admin, thirdSlots[i])
+      if (slot && !slot.away_team_id && slot.status !== 'finished') {
+        await admin.from('matches').update({ away_team_id: thirdsRanked[i].team_id }).eq('id', (slot as unknown as { id: string }).id)
+      }
+    }
   }
 
-  // Advance KO rounds
+  // Advance KO rounds (R32 → R16 → QF → SF → Final)
   await advanceKORound(admin, [[73,74,89],[75,76,90],[77,78,91],[79,80,92],[81,82,93],[83,84,94],[85,86,95],[87,88,96]])
   await advanceKORound(admin, [[89,90,97],[91,92,98],[93,94,99],[95,96,100]])
   await advanceKORound(admin, [[97,98,101],[99,100,102]])

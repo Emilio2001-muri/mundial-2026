@@ -41,7 +41,7 @@ export function AdminUsersClient({ users, currentUserId }: AdminUsersClientProps
     <div className="space-y-4">
       <a href="/admin" className="text-sm text-primary font-medium">← Admin</a>
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-black">Usuarios ({users.length}/8)</h1>
+        <h1 className="text-xl font-black">Usuarios ({users.length})</h1>
         <Button size="sm" onClick={() => setShowForm(!showForm)}>
           <UserPlus className="w-4 h-4" />
           Nuevo usuario
