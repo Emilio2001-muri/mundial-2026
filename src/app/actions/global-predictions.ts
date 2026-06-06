@@ -4,11 +4,9 @@ import { createClient } from '@/lib/supabase/server'
 import { globalPredictionFormSchema, type GlobalPredictionFormValues } from '@/types/forms'
 
 export async function saveGlobalPredictions(
-  tournamentId: string,
+  _tournamentId: string,
   values: GlobalPredictionFormValues
 ): Promise<{ error?: string }> {
-  if (!tournamentId) return { error: 'Torneo no encontrado.' }
-
   const parsed = globalPredictionFormSchema.safeParse(values)
   if (!parsed.success) return { error: 'Datos inválidos.' }
 
@@ -16,12 +14,14 @@ export async function saveGlobalPredictions(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'No autenticado.' }
 
-  // Check lock
+  // Fetch tournament directly (single tournament in DB)
   const { data: tournament } = await supabase
     .from('tournaments')
-    .select('global_predictions_lock_at')
-    .eq('id', tournamentId)
+    .select('id, global_predictions_lock_at')
     .single()
+
+  if (!tournament) return { error: 'Torneo no encontrado.' }
+  const tournamentId = tournament.id
 
   if (tournament && new Date() >= new Date(tournament.global_predictions_lock_at)) {
     // Check admin override
