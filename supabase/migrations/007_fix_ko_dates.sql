@@ -60,18 +60,18 @@ insert into public.matches
   (tournament_id, match_number, phase, home_placeholder, away_placeholder, venue_id, kickoff_at, status)
 select (select id from tid), m.num, 'round_of_16', m.home_ph, m.away_ph, ve.id, m.ko::timestamptz, 'scheduled'
 from (values
-  -- Jul 4 (W73 vs W75 = M90, W74 vs W77 = M89)
-  (90, 'W73', 'W75', 'NRG Stadium',            '2026-07-04T17:00:00Z'), -- Jul 4 12pm CDT
-  (89, 'W74', 'W77', 'Lincoln Financial Field','2026-07-04T21:00:00Z'), -- Jul 4 5pm EDT
-  -- Jul 5 (W76 vs W78 = M91, W79 vs W80 = M92)
-  (91, 'W76', 'W78', 'MetLife Stadium',        '2026-07-05T20:00:00Z'), -- Jul 5 4pm EDT
-  (92, 'W79', 'W80', 'Estadio Azteca',         '2026-07-06T00:00:00Z'), -- Jul 5 6pm CDT
-  -- Jul 6 (W83 vs W84 = M93, W81 vs W82 = M94)
-  (93, 'W83', 'W84', 'AT&T Stadium',           '2026-07-06T19:00:00Z'), -- Jul 6 2pm CDT
-  (94, 'W81', 'W82', 'Lumen Field',            '2026-07-07T00:00:00Z'), -- Jul 6 5pm PDT
-  -- Jul 7 (W86 vs W88 = M95, W85 vs W87 = M96)
-  (95, 'W86', 'W88', 'Mercedes-Benz Stadium',  '2026-07-07T16:00:00Z'), -- Jul 7 12pm EDT
-  (96, 'W85', 'W87', 'BC Place',               '2026-07-07T20:00:00Z')  -- Jul 7 1pm PDT
+  -- Jul 4
+  (90, 'Gan. 2A/2B',  'Gan. 1F/2C',  'NRG Stadium',            '2026-07-04T17:00:00Z'), -- Jul 4 12pm CDT (M73 vs M75)
+  (89, 'Gan. 1E/3°',  'Gan. 1I/3°',  'Lincoln Financial Field','2026-07-04T21:00:00Z'), -- Jul 4 5pm EDT  (M74 vs M77)
+  -- Jul 5
+  (91, 'Gan. 1C/2F',  'Gan. 2E/2I',  'MetLife Stadium',        '2026-07-05T20:00:00Z'), -- Jul 5 4pm EDT  (M76 vs M78)
+  (92, 'Gan. 1A/3°',  'Gan. 1L/3°',  'Estadio Azteca',         '2026-07-06T00:00:00Z'), -- Jul 5 6pm CDT  (M79 vs M80)
+  -- Jul 6
+  (93, 'Gan. 2K/2L',  'Gan. 1H/2J',  'AT&T Stadium',           '2026-07-06T19:00:00Z'), -- Jul 6 2pm CDT  (M83 vs M84)
+  (94, 'Gan. 1D/3°',  'Gan. 1G/3°',  'Lumen Field',            '2026-07-07T00:00:00Z'), -- Jul 6 5pm PDT  (M81 vs M82)
+  -- Jul 7
+  (95, 'Gan. 1J/2H',  'Gan. 2D/2G',  'Mercedes-Benz Stadium',  '2026-07-07T16:00:00Z'), -- Jul 7 12pm EDT (M86 vs M88)
+  (96, 'Gan. 1B/3°',  'Gan. 1K/3°',  'BC Place',               '2026-07-07T20:00:00Z')  -- Jul 7 1pm PDT  (M85 vs M87)
 ) as m(num, home_ph, away_ph, venue_name, ko)
 join v ve on ve.name = m.venue_name
 on conflict do nothing;
@@ -85,10 +85,10 @@ insert into public.matches
   (tournament_id, match_number, phase, home_placeholder, away_placeholder, venue_id, kickoff_at, status)
 select (select id from tid), m.num, 'quarter_final', m.home_ph, m.away_ph, ve.id, m.ko::timestamptz, 'scheduled'
 from (values
-  ( 97, 'W89', 'W90', 'Gillette Stadium',    '2026-07-09T20:00:00Z'), -- Jul 9 4pm EDT
-  ( 98, 'W93', 'W94', 'SoFi Stadium',        '2026-07-10T19:00:00Z'), -- Jul 10 12pm PDT
-  ( 99, 'W91', 'W92', 'Hard Rock Stadium',   '2026-07-11T21:00:00Z'), -- Jul 11 5pm EDT
-  (100, 'W95', 'W96', 'Arrowhead Stadium',   '2026-07-12T01:00:00Z')  -- Jul 11 8pm CDT
+  ( 97, 'Gan. Oct.1', 'Gan. Oct.2', 'Gillette Stadium',    '2026-07-09T20:00:00Z'), -- Jul 9  4pm EDT  (M89 vs M90)
+  ( 98, 'Gan. Oct.5', 'Gan. Oct.6', 'SoFi Stadium',        '2026-07-10T19:00:00Z'), -- Jul 10 12pm PDT (M93 vs M94)
+  ( 99, 'Gan. Oct.3', 'Gan. Oct.4', 'Hard Rock Stadium',   '2026-07-11T21:00:00Z'), -- Jul 11 5pm EDT  (M91 vs M92)
+  (100, 'Gan. Oct.7', 'Gan. Oct.8', 'Arrowhead Stadium',   '2026-07-12T01:00:00Z')  -- Jul 11 8pm CDT (M95 vs M96)
 ) as m(num, home_ph, away_ph, venue_name, ko)
 join v ve on ve.name = m.venue_name
 on conflict do nothing;
@@ -102,8 +102,8 @@ insert into public.matches
   (tournament_id, match_number, phase, home_placeholder, away_placeholder, venue_id, kickoff_at, status)
 select (select id from tid), m.num, 'semi_final', m.home_ph, m.away_ph, ve.id, m.ko::timestamptz, 'scheduled'
 from (values
-  (101, 'W97',  'W98',  'AT&T Stadium',       '2026-07-14T19:00:00Z'), -- Jul 14 2pm CDT
-  (102, 'W99',  'W100', 'Mercedes-Benz Stadium','2026-07-15T19:00:00Z') -- Jul 15 3pm EDT
+  (101, 'Gan. CF1', 'Gan. CF2', 'AT&T Stadium',         '2026-07-14T19:00:00Z'), -- Jul 14 2pm CDT (M97 vs M98)
+  (102, 'Gan. CF3', 'Gan. CF4', 'Mercedes-Benz Stadium', '2026-07-15T19:00:00Z')  -- Jul 15 3pm EDT (M99 vs M100)
 ) as m(num, home_ph, away_ph, venue_name, ko)
 join v ve on ve.name = m.venue_name
 on conflict do nothing;

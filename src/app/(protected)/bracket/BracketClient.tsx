@@ -49,14 +49,21 @@ function MiniMatch({ m }: { m: MatchWithTeams }) {
   )
 }
 
+// Translates "W74" → "Gan. M74", passes other strings through unchanged
+function fmtPh(ph: string | null | undefined): string {
+  if (!ph) return '?'
+  const m = ph.match(/^W(\d+)$/)
+  return m ? `Gan. M${m[1]}` : ph
+}
+
 // Compact KO card (used inside bracket pairs)
 function KOCard({ m }: { m: MatchWithTeams }) {
   const homeDefined = !!m.home_team_id
   const awayDefined = !!m.away_team_id
   const played = m.status === 'finished'
   const live = m.status === 'live'
-  const homeLabel = homeDefined ? (m.home_team?.fifa_code ?? '?') : (m.home_placeholder ?? '?')
-  const awayLabel = awayDefined ? (m.away_team?.fifa_code ?? '?') : (m.away_placeholder ?? '?')
+  const homeLabel = homeDefined ? (m.home_team?.fifa_code ?? '?') : fmtPh(m.home_placeholder)
+  const awayLabel = awayDefined ? (m.away_team?.fifa_code ?? '?') : fmtPh(m.away_placeholder)
   const homeWin = played && (m.home_score ?? 0) > (m.away_score ?? 0)
   const awayWin = played && (m.away_score ?? 0) > (m.home_score ?? 0)
 
@@ -98,8 +105,8 @@ function KOMatchRow({ m }: { m: MatchWithTeams }) {
   const awayDefined = !!m.away_team_id
   const played = m.status === 'finished'
   const live = m.status === 'live'
-  const homeLabel = homeDefined ? (m.home_team?.name ?? m.home_team?.fifa_code ?? '?') : (m.home_placeholder ?? '?')
-  const awayLabel = awayDefined ? (m.away_team?.name ?? m.away_team?.fifa_code ?? '?') : (m.away_placeholder ?? '?')
+  const homeLabel = homeDefined ? (m.home_team?.name ?? m.home_team?.fifa_code ?? '?') : fmtPh(m.home_placeholder)
+  const awayLabel = awayDefined ? (m.away_team?.name ?? m.away_team?.fifa_code ?? '?') : fmtPh(m.away_placeholder)
 
   return (
     <div className={`rounded-2xl border bg-card overflow-hidden ${live ? 'border-green-500/50' : 'border-border'}`}>

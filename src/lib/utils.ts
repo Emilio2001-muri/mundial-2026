@@ -18,7 +18,7 @@ export function formatMatchTime(
   const date = new Date(utcIso)
 
   if (format === 'full') {
-    return new Intl.DateTimeFormat('es-ES', {
+    return new Intl.DateTimeFormat('es-MX', {
       weekday: 'long',
       day: 'numeric',
       month: 'long',
@@ -29,8 +29,8 @@ export function formatMatchTime(
     }).format(date)
   }
 
-  return new Intl.DateTimeFormat('es-ES', {
-    day: '2-digit',
+  return new Intl.DateTimeFormat('es-MX', {
+    day: 'numeric',
     month: 'short',
     hour: '2-digit',
     minute: '2-digit',
