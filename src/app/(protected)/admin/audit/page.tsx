@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
-import { deleteMatchPrediction, clearPredictionComment, deleteGlobalPrediction, unlockGlobalPrediction } from '@/app/actions/admin'
+import { deleteMatchPrediction, clearPredictionComment, deleteGlobalPrediction, unlockGlobalPrediction, unlockMatchPrediction, relockMatchPrediction } from '@/app/actions/admin'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 export const revalidate = 0
@@ -18,14 +18,14 @@ export default async function AdminAuditPage() {
     adminClient
       .from('match_predictions')
       .select(`
-        id, comment, predicted_home_score, predicted_away_score, created_at,
+        id, comment, predicted_home_score, predicted_away_score, updated_at, admin_unlocked,
         profile:profiles(display_name),
-        match:matches(match_number,
+        match:matches(match_number, kickoff_at,
           home_team:teams!matches_home_team_id_fkey(fifa_code),
           away_team:teams!matches_away_team_id_fkey(fifa_code)
         )
       `)
-      .order('created_at', { ascending: false })
+      .order('updated_at', { ascending: false })
       .limit(200),
     adminClient
       .from('global_predictions')
@@ -120,19 +120,46 @@ export default async function AdminAuditPage() {
                   <span className="text-xs font-semibold text-primary">
                     {p.predicted_home_score ?? '?'} – {p.predicted_away_score ?? '?'}
                   </span>
+                  {p.admin_unlocked && (
+                    <span className="text-[10px] font-bold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                      🔓 Desbloqueada
+                    </span>
+                  )}
                 </div>
                 {p.comment && (
                   <p className="text-xs text-muted-foreground mt-1 italic bg-muted/50 rounded px-2 py-1">
                     "{p.comment}"
                   </p>
                 )}
+                {p.updated_at && (
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {new Intl.DateTimeFormat('es-MX', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(p.updated_at))}
+                  </p>
+                )}
               </div>
               <div className="flex flex-col gap-1 flex-shrink-0">
+                {p.admin_unlocked ? (
+                  <form action={relockMatchPrediction}>
+                    <input type="hidden" name="prediction_id" value={p.id} />
+                    <button type="submit"
+                      className="w-full text-xs text-blue-600 font-semibold px-2 py-1 rounded border border-blue-500/20 hover:bg-blue-500/10 transition-colors whitespace-nowrap">
+                      Relockear
+                    </button>
+                  </form>
+                ) : (
+                  <form action={unlockMatchPrediction}>
+                    <input type="hidden" name="prediction_id" value={p.id} />
+                    <button type="submit"
+                      className="w-full text-xs text-amber-600 font-semibold px-2 py-1 rounded border border-amber-500/20 hover:bg-amber-500/10 transition-colors whitespace-nowrap">
+                      Desbloquear
+                    </button>
+                  </form>
+                )}
                 {p.comment && (
                   <form action={clearPredictionComment}>
                     <input type="hidden" name="prediction_id" value={p.id} />
                     <button type="submit"
-                      className="w-full text-xs text-amber-600 font-semibold px-2 py-1 rounded border border-amber-500/20 hover:bg-amber-500/10 transition-colors whitespace-nowrap">
+                      className="w-full text-xs text-muted-foreground font-semibold px-2 py-1 rounded border border-border hover:bg-muted transition-colors whitespace-nowrap">
                       Borrar comentario
                     </button>
                   </form>
@@ -141,7 +168,7 @@ export default async function AdminAuditPage() {
                   <input type="hidden" name="prediction_id" value={p.id} />
                   <button type="submit"
                     className="w-full text-xs text-destructive font-semibold px-2 py-1 rounded border border-destructive/20 hover:bg-destructive/10 transition-colors">
-                    Borrar predicción
+                    Borrar
                   </button>
                 </form>
               </div>

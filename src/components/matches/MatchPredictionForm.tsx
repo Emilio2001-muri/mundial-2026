@@ -21,6 +21,7 @@ interface MatchPredictionFormProps {
   awayPlayers: Player[]
   homeLineup: Lineup[]
   awayLineup: Lineup[]
+  adminUnlocked?: boolean
 }
 
 export function MatchPredictionForm({
@@ -30,8 +31,9 @@ export function MatchPredictionForm({
   awayPlayers,
   homeLineup,
   awayLineup,
+  adminUnlocked = false,
 }: MatchPredictionFormProps) {
-  const locked = isMatchLocked(match.kickoff_at)
+  const locked = isMatchLocked(match.kickoff_at) && !adminUnlocked
   const [isPending, startTransition] = useTransition()
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)

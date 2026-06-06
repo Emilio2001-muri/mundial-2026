@@ -19,6 +19,7 @@ interface MatchDetailClientProps {
   awayPlayers: Player[]
   homeLineup: Lineup[]
   awayLineup: Lineup[]
+  adminUnlocked?: boolean
 }
 
 export function MatchDetailClient({
@@ -29,6 +30,7 @@ export function MatchDetailClient({
   awayPlayers,
   homeLineup,
   awayLineup,
+  adminUnlocked = false,
 }: MatchDetailClientProps) {
   const isFinished = match.status === 'finished'
   const isLive = match.status === 'live'
@@ -142,6 +144,7 @@ export function MatchDetailClient({
           awayPlayers={awayPlayers}
           homeLineup={homeLineup}
           awayLineup={awayLineup}
+          adminUnlocked={adminUnlocked}
         />
       </motion.div>
     </div>

@@ -57,6 +57,7 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
       awayPlayers={awayPlayers as Player[]}
       homeLineup={homeLineup as Lineup[]}
       awayLineup={awayLineup as Lineup[]}
+      adminUnlocked={(prediction as any)?.admin_unlocked ?? false}
     />
   )
 }

@@ -49,6 +49,24 @@ export async function unlockGlobalPrediction(formData: FormData) {
   revalidatePath('/admin/audit')
 }
 
+// ── Unlock match prediction (admin override – lets user re-edit) ──
+export async function unlockMatchPrediction(formData: FormData) {
+  const adminClient = createAdminClient()
+  await requireAdmin()
+  const id = formData.get('prediction_id') as string
+  await adminClient.from('match_predictions').update({ admin_unlocked: true }).eq('id', id)
+  revalidatePath('/admin/audit')
+}
+
+// ── Re-lock match prediction (after admin unlocked it) ───────────
+export async function relockMatchPrediction(formData: FormData) {
+  const adminClient = createAdminClient()
+  await requireAdmin()
+  const id = formData.get('prediction_id') as string
+  await adminClient.from('match_predictions').update({ admin_unlocked: false }).eq('id', id)
+  revalidatePath('/admin/audit')
+}
+
 // ── Update match result ──────────────────────────────────────────
 // Accepts both FormData (server action) and (matchId, home, away) (client call)
 export async function updateMatchResult(formDataOrId: FormData | string, homeScoreArg?: number, awayScoreArg?: number): Promise<{ error?: string }> {
