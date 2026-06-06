@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Geist } from 'next/font/google'
 import './globals.css'
 import { Providers } from './providers'
+import { LiveScorePoller } from '@/components/LiveScorePoller'
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -53,6 +54,7 @@ export default function RootLayout({
     <html lang="es" className={`${geistSans.variable} h-full`} suppressHydrationWarning>
       <body className="min-h-full bg-background text-foreground antialiased">
         <Providers>{children}</Providers>
+        <LiveScorePoller />
       </body>
     </html>
   )
