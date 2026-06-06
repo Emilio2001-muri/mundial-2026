@@ -92,36 +92,62 @@ export async function updateScoringRule(rule: { id: string; points: number; enab
 
 // ── Sync fixtures (football-data.org) ────────────────────────────
 export async function syncFixtures(): Promise<{ error?: string; count?: number; updated?: number }> {
-  const supabase = await requireAdmin()
+  await requireAdmin()
   const admin = createAdminClient()
 
   const { fetchLiveFixtures } = await import('@/lib/football-data')
   const { fixtures, error } = await fetchLiveFixtures()
 
   if (error) return { error }
-  if (!fixtures.length) return { error: 'La API no devolvió partidos. Verifica la clave o el ID de competición.' }
+  if (!fixtures.length) return { error: 'La API no devolvió partidos. Verifica la clave o el ID de competición (prueba con FOOTBALL_DATA_COMPETITION=2000).' }
 
+  // Load all teams by code for fast lookup
+  const { data: teams } = await admin.from('teams').select('id, fifa_code')
+  const teamMap: Record<string, string> = {}
+  for (const t of teams ?? []) teamMap[t.fifa_code] = t.id
+
+  const TOURNAMENT_ID = 'a1b2c3d4-0000-0000-0000-000000000001'
   let updated = 0
+
   for (const f of fixtures) {
-    // Match by home/away team codes AND kickoff date
+    const homeId = teamMap[f.home_code]
+    const awayId = teamMap[f.away_code]
+    if (!homeId || !awayId) continue
+
+    // Find existing match by team IDs
     const { data: match } = await admin
       .from('matches')
-      .select('id, home_team:teams!matches_home_team_id_fkey(fifa_code), away_team:teams!matches_away_team_id_fkey(fifa_code)')
-      .gte('kickoff_at', f.kickoff_utc.slice(0, 10) + 'T00:00:00Z')
-      .lte('kickoff_at', f.kickoff_utc.slice(0, 10) + 'T23:59:59Z')
+      .select('id')
+      .eq('tournament_id', TOURNAMENT_ID)
+      .eq('home_team_id', homeId)
+      .eq('away_team_id', awayId)
       .maybeSingle()
 
-    if (!match) continue
-
-    await supabase.from('matches').update({
-      home_score: f.home_score,
-      away_score: f.away_score,
-      home_score_et: f.home_score_et,
-      away_score_et: f.away_score_et,
-      home_penalties: f.home_penalties,
-      away_penalties: f.away_penalties,
-      status: f.status,
-    }).eq('id', match.id)
+    if (match) {
+      // Update kickoff time AND scores/status
+      await admin.from('matches').update({
+        kickoff_at: f.kickoff_utc,
+        home_score: f.home_score,
+        away_score: f.away_score,
+        home_score_et: f.home_score_et,
+        away_score_et: f.away_score_et,
+        home_penalties: f.home_penalties,
+        away_penalties: f.away_penalties,
+        status: f.status,
+      }).eq('id', match.id)
+    } else {
+      // Match not in DB yet — insert it (group stage new entry)
+      await admin.from('matches').insert({
+        tournament_id: TOURNAMENT_ID,
+        phase: 'group',
+        home_team_id: homeId,
+        away_team_id: awayId,
+        kickoff_at: f.kickoff_utc,
+        status: f.status,
+        home_score: f.home_score,
+        away_score: f.away_score,
+      })
+    }
     updated++
   }
 

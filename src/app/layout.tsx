@@ -15,6 +15,11 @@ export const metadata: Metadata = {
   },
   description: 'La quiniela más premium del Mundial 2026. Predice, compite y gana.',
   manifest: '/manifest.json',
+  icons: {
+    icon: 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚽</text></svg>',
+    shortcut: 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚽</text></svg>',
+    apple: 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚽</text></svg>',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',

@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { isMatchLocked } from '@/lib/scoring'
@@ -10,10 +11,27 @@ interface MatchCardProps {
   match: MatchWithPrediction
 }
 
+function KickoffLabel({ utcIso }: { utcIso: string }) {
+  const [label, setLabel] = useState<{ date: string; time: string } | null>(null)
+  useEffect(() => {
+    const d = new Date(utcIso)
+    setLabel({
+      date: d.toLocaleDateString('es-MX', { month: 'short', day: 'numeric' }),
+      time: d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
+    })
+  }, [utcIso])
+  if (!label) return <p className="text-xs text-muted-foreground">…</p>
+  return (
+    <>
+      <p className="text-sm font-bold">{label.date}</p>
+      <p className="text-xs text-muted-foreground">{label.time}</p>
+    </>
+  )
+}
+
 export function MatchCard({ match }: MatchCardProps) {
   const pred = match.my_prediction ?? null
   const locked = isMatchLocked(match.kickoff_at)
-  const kickoff = new Date(match.kickoff_at)
 
   const homeName = match.home_team?.fifa_code ?? match.home_placeholder ?? '?'
   const awayName = match.away_team?.fifa_code ?? match.away_placeholder ?? '?'
@@ -46,8 +64,7 @@ export function MatchCard({ match }: MatchCardProps) {
             </div>
           ) : (
             <div>
-              <p className="text-sm font-bold">{kickoff.toLocaleDateString('es-MX', { month: 'short', day: 'numeric' })}</p>
-              <p className="text-xs text-muted-foreground">{kickoff.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</p>
+              <KickoffLabel utcIso={match.kickoff_at} />
             </div>
           )}
 
