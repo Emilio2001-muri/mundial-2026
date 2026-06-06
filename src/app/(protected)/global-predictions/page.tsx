@@ -12,7 +12,7 @@ export default async function GlobalPredictionsPage() {
     await Promise.all([
       supabase.from('tournaments').select('*').single(),
       supabase.from('teams').select('*').order('name'),
-      supabase.from('players').select('*').eq('active', true).order('name'),
+      supabase.from('players').select('*').order('name'),
       supabase
         .from('global_predictions')
         .select('*')
