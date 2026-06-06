@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { deleteMatchPrediction, clearPredictionComment, deleteGlobalPrediction, unlockGlobalPrediction } from '@/app/actions/admin'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -7,13 +8,14 @@ export const revalidate = 0
 
 export default async function AdminAuditPage() {
   const supabase = await createClient()
+  const adminClient = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
   if (profile?.role !== 'admin') redirect('/dashboard')
 
   const [{ data: predictions }, { data: globalPredictions }] = await Promise.all([
-    supabase
+    adminClient
       .from('match_predictions')
       .select(`
         id, comment, predicted_home_score, predicted_away_score, created_at,
@@ -25,7 +27,7 @@ export default async function AdminAuditPage() {
       `)
       .order('created_at', { ascending: false })
       .limit(200),
-    supabase
+    adminClient
       .from('global_predictions')
       .select(`
         id, submitted_at, updated_at,

@@ -80,6 +80,18 @@ export function MatchPredictionForm({
         <LockCountdown kickoffAt={match.kickoff_at} />
       </div>
 
+      {/* Points guide */}
+      <Card className="border-primary/20 bg-primary/5">
+        <CardContent className="py-3 px-4">
+          <p className="text-[11px] font-bold text-primary uppercase tracking-wider mb-2">Puntos posibles</p>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <span>✓ Marcador exacto <strong className="text-foreground">+3 pts</strong></span>
+            <span>~ Ganador / empate <strong className="text-foreground">+2 pts</strong></span>
+            <span>⚽ Gol acertado <strong className="text-foreground">+1 pt</strong></span>
+          </div>
+        </CardContent>
+      </Card>
+
       {locked && (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="py-3 px-4">

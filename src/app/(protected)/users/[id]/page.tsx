@@ -12,54 +12,35 @@ export default async function UserProfilePage({ params }: { params: Promise<{ id
   const supabase = await createClient()
   const admin = createAdminClient()
 
-  // Use admin client (bypasses RLS) so any user can view any profile's predictions
-  // Falls back to regular client query if admin client fails (env var missing)
-  const matchPredsQuery = async () => {
-    const { data, error } = await admin
-      .from('match_predictions')
-      .select(`
-        id, predicted_home_score, predicted_away_score, created_at,
-        match:matches(
-          id, match_number, phase, kickoff_at, status, home_score, away_score,
-          home_team:teams!matches_home_team_id_fkey(name, fifa_code, flag_url),
-          away_team:teams!matches_away_team_id_fkey(name, fifa_code, flag_url)
-        ),
-        scorers:scorer_predictions(
-          predicted_goals,
-          player:players(name, team_id,
-            team:teams(fifa_code)
-          )
-        )
-      `)
-      .eq('user_id', id)
-      .order('created_at', { ascending: true })
-      .limit(104)
-    if (error || !data) {
-      // fallback with user session (works for own profile)
-      return supabase
+  const matchPredSelect = `
+    id, predicted_home_score, predicted_away_score, created_at,
+    match:matches(
+      id, match_number, phase, kickoff_at, status, home_score, away_score,
+      home_team:teams!matches_home_team_id_fkey(name, fifa_code, flag_url),
+      away_team:teams!matches_away_team_id_fkey(name, fifa_code, flag_url)
+    ),
+    scorers:scorer_predictions(predicted_goals, player:players(name))
+  `
+
+  // Use admin client (bypasses RLS) so pre-kickoff preds are visible
+  // Properly awaited fallback to user-session client if admin fails
+  const { data: mpData, error: mpError } = await admin
+    .from('match_predictions')
+    .select(matchPredSelect)
+    .eq('user_id', id)
+    .order('created_at', { ascending: true })
+    .limit(104)
+
+  const matchPreds = (!mpError && mpData !== null)
+    ? mpData
+    : (await supabase
         .from('match_predictions')
-        .select(`
-          id, predicted_home_score, predicted_away_score, created_at,
-          match:matches(
-            id, match_number, phase, kickoff_at, status, home_score, away_score,
-            home_team:teams!matches_home_team_id_fkey(name, fifa_code, flag_url),
-            away_team:teams!matches_away_team_id_fkey(name, fifa_code, flag_url)
-          ),
-          scorers:scorer_predictions(
-            predicted_goals,
-            player:players(name, team_id,
-              team:teams(fifa_code)
-            )
-          )
-        `)
+        .select(matchPredSelect)
         .eq('user_id', id)
         .order('created_at', { ascending: true })
-        .limit(104)
-    }
-    return { data }
-  }
+        .limit(104)).data ?? []
 
-  const [{ data: profile }, { data: snapshot }, { data: recentScores }, { data: globalPred }, { data: matchPreds }] = await Promise.all([
+  const [{ data: profile }, { data: snapshot }, { data: recentScores }, { data: globalPred }] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', id).single(),
     supabase
       .from('leaderboard_snapshots')
@@ -88,7 +69,6 @@ export default async function UserProfilePage({ params }: { params: Promise<{ id
       `)
       .eq('user_id', id)
       .maybeSingle(),
-    matchPredsQuery(),
   ])
 
   if (!profile) notFound()
