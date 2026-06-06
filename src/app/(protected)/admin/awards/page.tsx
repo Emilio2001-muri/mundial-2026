@@ -8,6 +8,12 @@ export const revalidate = 0
 
 const TOURNAMENT_ID = 'a1b2c3d4-0000-0000-0000-000000000001'
 
+// Wrapper: form action must return void
+async function handleSaveAwards(formData: FormData) {
+  'use server'
+  await saveTournamentAwards(formData)
+}
+
 export default async function AdminAwardsPage() {
   const supabase = await createClient()
   const admin = createAdminClient()
@@ -53,7 +59,7 @@ export default async function AdminAwardsPage() {
         Al guardar, se recalculan automáticamente los puntos de predicciones globales de todos los participantes.
       </p>
 
-      <form action={saveTournamentAwards} className="space-y-4">
+      <form action={handleSaveAwards} className="space-y-4">
         {/* Equipos */}
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-sm">🥇 Clasificación de equipos</CardTitle></CardHeader>

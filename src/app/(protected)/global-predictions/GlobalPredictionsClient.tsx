@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { PlayerCombobox } from '@/components/ui/PlayerCombobox'
 import type { GlobalPrediction, Player, Team } from '@/types'
-import { Check, AlertTriangle, Trophy, Star, Award, Clock, Lock, Pencil } from 'lucide-react'
+import { Check, AlertTriangle, Trophy, Star, Award, Clock, Lock } from 'lucide-react'
 import { haptic } from '@/lib/utils'
 
 function Countdown({ lockAt }: { lockAt: string }) {
@@ -150,10 +150,9 @@ export function GlobalPredictionsClient({
   const [isPending, startTransition] = useTransition()
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [editing, setEditing] = useState(!existingPrediction)
 
-  // Non-admins can't re-edit after first submit — they must ask admin
-  const effectiveLocked = locked || (!isAdmin && !!existingPrediction && !editing)
+  // Locked only when tournament lock date has passed
+  const effectiveLocked = locked
 
   // Filtered player lists by position
   const goalkeepers = players.filter(p => p.position === 'GK')
@@ -340,12 +339,6 @@ export function GlobalPredictionsClient({
           </Button>
         )}
 
-        {isAdmin && !!existingPrediction && effectiveLocked && !locked && (
-          <Button type="button" variant="outline" size="sm" className="w-full"
-            onClick={() => setEditing(true)}>
-            <Pencil className="w-4 h-4 mr-2" /> Admin: modificar predicción
-          </Button>
-        )}
       </form>
     </div>
   )
