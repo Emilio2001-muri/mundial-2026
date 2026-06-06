@@ -32,6 +32,23 @@ export async function clearPredictionComment(formData: FormData) {
   revalidatePath('/admin')
 }
 
+// ── Delete a global prediction (resets user's global picks) ─────
+export async function deleteGlobalPrediction(formData: FormData) {
+  const supabase = await requireAdmin()
+  const id = formData.get('prediction_id') as string
+  await supabase.from('global_predictions').delete().eq('id', id)
+  revalidatePath('/admin/audit')
+}
+
+// ── Unlock global prediction (allows user to re-edit) ────────────
+export async function unlockGlobalPrediction(formData: FormData) {
+  const supabase = await requireAdmin()
+  const id = formData.get('prediction_id') as string
+  // Clear submitted_at so the client treats it as editable again
+  await supabase.from('global_predictions').update({ submitted_at: null }).eq('id', id)
+  revalidatePath('/admin/audit')
+}
+
 // ── Update match result ──────────────────────────────────────────
 // Accepts both FormData (server action) and (matchId, home, away) (client call)
 export async function updateMatchResult(formDataOrId: FormData | string, homeScoreArg?: number, awayScoreArg?: number): Promise<{ error?: string }> {

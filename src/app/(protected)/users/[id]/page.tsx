@@ -177,36 +177,37 @@ export default async function UserProfilePage({ params }: { params: Promise<{ id
       )}
 
       {/* Match predictions */}
-      {(matchPreds?.length ?? 0) > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Swords className="w-4 h-4 text-primary" /> Predicciones de Partidos
-              <Badge variant="outline" className="ml-auto">{matchPreds!.length}</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 pt-0">
-            {matchPreds!.map((mp) => {
-              const m = mp.match as any
-              return (
-                <div key={mp.id} className="flex items-center gap-2 py-2 border-b border-border/30 last:border-0">
-                  <span className="text-xs text-muted-foreground w-6 text-center">{m?.home_team?.fifa_code ?? '?'}</span>
-                  <span className="text-xs font-medium flex-1 text-center">
-                    {m?.home_team?.name ?? '?'}
-                  </span>
-                  <span className="font-black text-sm tabular-nums">
-                    {mp.predicted_home_score} - {mp.predicted_away_score}
-                  </span>
-                  <span className="text-xs font-medium flex-1 text-center">
-                    {m?.away_team?.name ?? '?'}
-                  </span>
-                  <span className="text-xs text-muted-foreground w-6 text-center">{m?.away_team?.fifa_code ?? '?'}</span>
-                </div>
-              )
-            })}
-          </CardContent>
-        </Card>
-      )}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Swords className="w-4 h-4 text-primary" /> Predicciones de Partidos
+            <span className="ml-auto text-sm font-normal text-muted-foreground">{matchPreds?.length ?? 0}</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 pt-0">
+          {(matchPreds?.length ?? 0) === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-4">Sin predicciones de partidos aún.</p>
+          )}
+          {(matchPreds ?? []).map((mp) => {
+            const m = mp.match as any
+            return (
+              <div key={mp.id} className="flex items-center gap-2 py-2 border-b border-border/30 last:border-0">
+                <span className="text-xs text-muted-foreground w-8 text-center font-mono">{m?.home_team?.fifa_code ?? '?'}</span>
+                <span className="text-xs font-medium flex-1 text-right truncate">
+                  {m?.home_team?.name ?? '?'}
+                </span>
+                <span className="font-black text-sm tabular-nums px-1">
+                  {mp.predicted_home_score} - {mp.predicted_away_score}
+                </span>
+                <span className="text-xs font-medium flex-1 text-left truncate">
+                  {m?.away_team?.name ?? '?'}
+                </span>
+                <span className="text-xs text-muted-foreground w-8 text-center font-mono">{m?.away_team?.fifa_code ?? '?'}</span>
+              </div>
+            )
+          })}
+        </CardContent>
+      </Card>
     </div>
   )
 }

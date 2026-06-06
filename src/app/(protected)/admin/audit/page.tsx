@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { deleteMatchPrediction, clearPredictionComment } from '@/app/actions/admin'
+import { deleteMatchPrediction, clearPredictionComment, deleteGlobalPrediction, unlockGlobalPrediction } from '@/app/actions/admin'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 export const revalidate = 0
@@ -70,6 +70,22 @@ export default async function AdminAuditPage() {
                         {new Intl.DateTimeFormat('es-MX', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(gp.submitted_at))}
                       </p>
                     )}
+                  </div>
+                  <div className="flex flex-col gap-1 flex-shrink-0">
+                    <form action={unlockGlobalPrediction}>
+                      <input type="hidden" name="prediction_id" value={gp.id} />
+                      <button type="submit"
+                        className="w-full text-xs text-amber-600 font-semibold px-2 py-1 rounded border border-amber-500/20 hover:bg-amber-500/10 transition-colors whitespace-nowrap">
+                        Desbloquear
+                      </button>
+                    </form>
+                    <form action={deleteGlobalPrediction}>
+                      <input type="hidden" name="prediction_id" value={gp.id} />
+                      <button type="submit"
+                        className="w-full text-xs text-destructive font-semibold px-2 py-1 rounded border border-destructive/20 hover:bg-destructive/10 transition-colors">
+                        Borrar
+                      </button>
+                    </form>
                   </div>
                 </div>
               </div>

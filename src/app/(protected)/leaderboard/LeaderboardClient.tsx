@@ -14,9 +14,10 @@ type SnapshotWithProfile = LeaderboardSnapshot & { profile: Profile }
 interface LeaderboardClientProps {
   initialData: SnapshotWithProfile[]
   currentUserId: string
+  isPreTournament?: boolean
 }
 
-export function LeaderboardClient({ initialData, currentUserId }: LeaderboardClientProps) {
+export function LeaderboardClient({ initialData, currentUserId, isPreTournament }: LeaderboardClientProps) {
   const [entries, setEntries] = useState(initialData)
   const supabase = createClient()
 
@@ -67,6 +68,12 @@ export function LeaderboardClient({ initialData, currentUserId }: LeaderboardCli
           <p className="text-sm text-muted-foreground">Empieza haciendo predicciones</p>
         </div>
       ) : (
+        <>
+          {isPreTournament && (
+            <p className="text-xs text-muted-foreground text-center py-1">
+              Participantes registrados · los puntos empezarán al inicio del torneo
+            </p>
+          )}
         <div className="space-y-2">
           <AnimatePresence>
             {entries.map((entry, idx) => {
@@ -136,13 +143,15 @@ export function LeaderboardClient({ initialData, currentUserId }: LeaderboardCli
 
                           {/* Points + movement */}
                           <div className="flex flex-col items-end gap-0.5">
-                            <span className="text-xl font-black">{entry.total_points}</span>
-                            <div className="flex items-center gap-0.5">
-                              {movement === 'up' && <TrendingUp className="w-3 h-3 text-emerald-500" />}
-                              {movement === 'down' && <TrendingDown className="w-3 h-3 text-red-400" />}
-                              {movement === 'same' && <Minus className="w-3 h-3 text-muted-foreground" />}
-                              {movement === 'new' && <span className="text-[10px] text-muted-foreground">nuevo</span>}
-                            </div>
+                            <span className="text-xl font-black">{isPreTournament ? '—' : entry.total_points}</span>
+                            {!isPreTournament && (
+                              <div className="flex items-center gap-0.5">
+                                {movement === 'up' && <TrendingUp className="w-3 h-3 text-emerald-500" />}
+                                {movement === 'down' && <TrendingDown className="w-3 h-3 text-red-400" />}
+                                {movement === 'same' && <Minus className="w-3 h-3 text-muted-foreground" />}
+                                {movement === 'new' && <span className="text-[10px] text-muted-foreground">nuevo</span>}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </CardContent>
@@ -153,6 +162,7 @@ export function LeaderboardClient({ initialData, currentUserId }: LeaderboardCli
             })}
           </AnimatePresence>
         </div>
+        </>
       )}
     </div>
   )
