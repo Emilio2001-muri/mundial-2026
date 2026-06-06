@@ -1,5 +1,4 @@
 import { createClient } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase/admin'
 import { notFound } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -10,7 +9,6 @@ export const revalidate = 0
 export default async function UserProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createClient()
-  const admin = createAdminClient()
 
   const matchPredSelect = `
     id, predicted_home_score, predicted_away_score, created_at,
@@ -22,23 +20,15 @@ export default async function UserProfilePage({ params }: { params: Promise<{ id
     scorers:scorer_predictions(predicted_goals, player:players(name))
   `
 
-  // Use admin client (bypasses RLS) so pre-kickoff preds are visible
-  // Properly awaited fallback to user-session client if admin fails
-  const { data: mpData, error: mpError } = await admin
+  // Session client: after migration 011, all authenticated users can read any prediction
+  const { data: mpData } = await supabase
     .from('match_predictions')
     .select(matchPredSelect)
     .eq('user_id', id)
     .order('created_at', { ascending: true })
     .limit(104)
 
-  const matchPreds = (!mpError && mpData !== null)
-    ? mpData
-    : (await supabase
-        .from('match_predictions')
-        .select(matchPredSelect)
-        .eq('user_id', id)
-        .order('created_at', { ascending: true })
-        .limit(104)).data ?? []
+  const matchPreds = mpData ?? []
 
   const [{ data: profile }, { data: snapshot }, { data: recentScores }, { data: globalPred }] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', id).single(),
@@ -55,7 +45,7 @@ export default async function UserProfilePage({ params }: { params: Promise<{ id
       .eq('user_id', id)
       .order('created_at', { ascending: false })
       .limit(20),
-    admin
+    supabase
       .from('global_predictions')
       .select(`
         submitted_at, updated_at,
