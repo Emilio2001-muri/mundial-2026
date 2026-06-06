@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { notFound } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -9,6 +10,7 @@ export const revalidate = 0
 export default async function UserProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createClient()
+  const admin = createAdminClient() // bypass RLS for cross-user reads
 
   const [{ data: profile }, { data: snapshot }, { data: recentScores }, { data: globalPred }, { data: matchPreds }] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', id).single(),
@@ -25,7 +27,7 @@ export default async function UserProfilePage({ params }: { params: Promise<{ id
       .eq('user_id', id)
       .order('created_at', { ascending: false })
       .limit(20),
-    supabase
+    admin
       .from('global_predictions')
       .select(`
         submitted_at, updated_at,
@@ -39,7 +41,7 @@ export default async function UserProfilePage({ params }: { params: Promise<{ id
       `)
       .eq('user_id', id)
       .maybeSingle(),
-    supabase
+    admin
       .from('match_predictions')
       .select(`
         id, predicted_home_score, predicted_away_score, created_at,
@@ -47,6 +49,12 @@ export default async function UserProfilePage({ params }: { params: Promise<{ id
           id, match_number, phase, kickoff_at, status, home_score, away_score,
           home_team:teams!matches_home_team_id_fkey(name, fifa_code, flag_url),
           away_team:teams!matches_away_team_id_fkey(name, fifa_code, flag_url)
+        ),
+        scorers:scorer_predictions(
+          predicted_goals,
+          player:players(name, team_id,
+            team:teams(fifa_code)
+          )
         )
       `)
       .eq('user_id', id)
@@ -219,35 +227,47 @@ export default async function UserProfilePage({ params }: { params: Promise<{ id
             }
 
             return (
-              <div key={mp.id} className={`flex items-center gap-2 py-2.5 border-b border-border/20 last:border-0 rounded px-1 ${outcomeClass}`}>
-                {/* Teams + predicted score */}
-                <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                  <span className="text-[10px] font-mono text-muted-foreground w-7 text-right flex-shrink-0">{m?.home_team?.fifa_code ?? '?'}</span>
+              <div key={mp.id} className={`py-2.5 border-b border-border/20 last:border-0 rounded px-1 ${outcomeClass}`}>
+                {/* Score row */}
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-muted-foreground w-8 text-right flex-shrink-0">{m?.home_team?.fifa_code ?? '?'}</span>
                   <span className="font-black text-sm tabular-nums px-1.5 py-0.5 rounded bg-muted">
                     {ph} – {pa}
                   </span>
-                  <span className="text-[10px] font-mono text-muted-foreground w-7 flex-shrink-0">{m?.away_team?.fifa_code ?? '?'}</span>
+                  <span className="text-[10px] font-mono text-muted-foreground w-8 flex-shrink-0">{m?.away_team?.fifa_code ?? '?'}</span>
+
+                  <div className="flex items-center gap-2 ml-auto flex-shrink-0">
+                    {finished && hs !== null && (
+                      <span className="text-xs text-muted-foreground tabular-nums">
+                        {hs}–{as_}
+                      </span>
+                    )}
+                    {m?.status === 'live' && (
+                      <span className="text-[10px] font-bold text-blue-500">EN VIVO</span>
+                    )}
+                    {outcomeTag && (
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                        outcomeTag === 'Exacto' ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' :
+                        outcomeTag === 'Ganador' ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400' :
+                        'bg-red-500/20 text-red-600 dark:text-red-400'
+                      }`}>
+                        {outcomeTag}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
-                {/* Real result (if finished) */}
-                {finished && hs !== null && (
-                  <span className="text-xs text-muted-foreground tabular-nums flex-shrink-0">
-                    Real: {hs}–{as_}
-                  </span>
-                )}
-                {m?.status === 'live' && (
-                  <span className="text-[10px] font-bold text-blue-500 flex-shrink-0">EN VIVO</span>
-                )}
-
-                {/* Outcome badge */}
-                {outcomeTag && (
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${
-                    outcomeTag === 'Exacto' ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' :
-                    outcomeTag === 'Ganador' ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400' :
-                    'bg-red-500/20 text-red-600 dark:text-red-400'
-                  }`}>
-                    {outcomeTag}
-                  </span>
+                {/* Goalscorers */}
+                {(mp.scorers as any[])?.length > 0 && (
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 pl-9">
+                    {(mp.scorers as any[]).map((s: any, i: number) => (
+                      <span key={i} className="text-[10px] text-muted-foreground">
+                        ⚽ {s.player?.name ?? '?'}
+                        {s.predicted_goals > 1 && ` ×${s.predicted_goals}`}
+                        <span className="opacity-50 ml-0.5">({s.player?.team?.fifa_code ?? '?'})</span>
+                      </span>
+                    ))}
+                  </div>
                 )}
               </div>
             )
