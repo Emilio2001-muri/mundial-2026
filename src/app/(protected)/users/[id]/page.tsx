@@ -43,15 +43,15 @@ export default async function UserProfilePage({ params }: { params: Promise<{ id
       .from('match_predictions')
       .select(`
         id, predicted_home_score, predicted_away_score, created_at,
-        match:matches!inner(
-          match_number, phase, kickoff_at,
-          home_team:teams!matches_home_team_id_fkey(name, fifa_code),
-          away_team:teams!matches_away_team_id_fkey(name, fifa_code)
+        match:matches(
+          id, match_number, phase, kickoff_at, status, home_score, away_score,
+          home_team:teams!matches_home_team_id_fkey(name, fifa_code, flag_url),
+          away_team:teams!matches_away_team_id_fkey(name, fifa_code, flag_url)
         )
       `)
       .eq('user_id', id)
-      .order('created_at', { ascending: false })
-      .limit(100),
+      .order('created_at', { ascending: true })
+      .limit(104),
   ])
 
   if (!profile) notFound()
@@ -184,25 +184,71 @@ export default async function UserProfilePage({ params }: { params: Promise<{ id
             <span className="ml-auto text-sm font-normal text-muted-foreground">{matchPreds?.length ?? 0}</span>
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2 pt-0">
+        <CardContent className="space-y-0 pt-0">
           {(matchPreds?.length ?? 0) === 0 && (
             <p className="text-sm text-muted-foreground text-center py-4">Sin predicciones de partidos aún.</p>
           )}
           {(matchPreds ?? []).map((mp) => {
             const m = mp.match as any
+            const finished = m?.status === 'finished'
+            const hs = m?.home_score as number | null
+            const as_ = m?.away_score as number | null
+            const ph = mp.predicted_home_score as number
+            const pa = mp.predicted_away_score as number
+
+            // Determine outcome label/color
+            let outcomeClass = 'border-border/30'
+            let outcomeTag: string | null = null
+            if (finished && hs !== null && as_ !== null) {
+              if (ph === hs && pa === as_) {
+                outcomeClass = 'border-l-4 border-l-emerald-500 bg-emerald-500/5'
+                outcomeTag = 'Exacto'
+              } else {
+                const realOutcome = hs > as_ ? 'H' : as_ > hs ? 'A' : 'D'
+                const predOutcome = ph > pa ? 'H' : pa > ph ? 'A' : 'D'
+                if (realOutcome === predOutcome) {
+                  outcomeClass = 'border-l-4 border-l-amber-500 bg-amber-500/5'
+                  outcomeTag = 'Ganador'
+                } else {
+                  outcomeClass = 'border-l-4 border-l-red-500 bg-red-500/5'
+                  outcomeTag = 'Fallo'
+                }
+              }
+            } else if (m?.status === 'live') {
+              outcomeClass = 'border-l-4 border-l-blue-500 bg-blue-500/5'
+            }
+
             return (
-              <div key={mp.id} className="flex items-center gap-2 py-2 border-b border-border/30 last:border-0">
-                <span className="text-xs text-muted-foreground w-8 text-center font-mono">{m?.home_team?.fifa_code ?? '?'}</span>
-                <span className="text-xs font-medium flex-1 text-right truncate">
-                  {m?.home_team?.name ?? '?'}
-                </span>
-                <span className="font-black text-sm tabular-nums px-1">
-                  {mp.predicted_home_score} - {mp.predicted_away_score}
-                </span>
-                <span className="text-xs font-medium flex-1 text-left truncate">
-                  {m?.away_team?.name ?? '?'}
-                </span>
-                <span className="text-xs text-muted-foreground w-8 text-center font-mono">{m?.away_team?.fifa_code ?? '?'}</span>
+              <div key={mp.id} className={`flex items-center gap-2 py-2.5 border-b border-border/20 last:border-0 rounded px-1 ${outcomeClass}`}>
+                {/* Teams + predicted score */}
+                <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                  <span className="text-[10px] font-mono text-muted-foreground w-7 text-right flex-shrink-0">{m?.home_team?.fifa_code ?? '?'}</span>
+                  <span className="font-black text-sm tabular-nums px-1.5 py-0.5 rounded bg-muted">
+                    {ph} – {pa}
+                  </span>
+                  <span className="text-[10px] font-mono text-muted-foreground w-7 flex-shrink-0">{m?.away_team?.fifa_code ?? '?'}</span>
+                </div>
+
+                {/* Real result (if finished) */}
+                {finished && hs !== null && (
+                  <span className="text-xs text-muted-foreground tabular-nums flex-shrink-0">
+                    Real: {hs}–{as_}
+                  </span>
+                )}
+                {m?.status === 'live' && (
+                  <span className="text-[10px] font-bold text-blue-500 flex-shrink-0">EN VIVO</span>
+                )}
+
+                {/* Outcome badge */}
+                {outcomeTag && (
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${
+                    outcomeTag === 'Exacto' ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' :
+                    outcomeTag === 'Ganador' ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400' :
+                    'bg-red-500/20 text-red-600 dark:text-red-400'
+                  }`}>
+                    {outcomeTag}
+                  </span>
+                )}
               </div>
             )
           })}
