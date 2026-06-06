@@ -225,28 +225,6 @@ export function MatchPredictionForm({
         />
       )}
 
-      {/* Comment */}
-      {!locked && (
-        <Card>
-          <CardContent className="py-4">
-            <Controller
-              name="comment"
-              control={control}
-              render={({ field }) => (
-                <textarea
-                  {...field}
-                  value={field.value ?? ''}
-                  placeholder="Comentario o confianza (opcional)…"
-                  maxLength={280}
-                  rows={2}
-                  className="w-full text-sm bg-transparent resize-none focus:outline-none placeholder:text-muted-foreground"
-                />
-              )}
-            />
-          </CardContent>
-        </Card>
-      )}
-
       {/* Error */}
       {error && (
         <p className="text-sm text-destructive flex items-center gap-2">

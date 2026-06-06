@@ -10,7 +10,54 @@ export const revalidate = 0
 export default async function UserProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createClient()
-  const admin = createAdminClient() // bypass RLS for cross-user reads
+  const admin = createAdminClient()
+
+  // Use admin client (bypasses RLS) so any user can view any profile's predictions
+  // Falls back to regular client query if admin client fails (env var missing)
+  const matchPredsQuery = async () => {
+    const { data, error } = await admin
+      .from('match_predictions')
+      .select(`
+        id, predicted_home_score, predicted_away_score, created_at,
+        match:matches(
+          id, match_number, phase, kickoff_at, status, home_score, away_score,
+          home_team:teams!matches_home_team_id_fkey(name, fifa_code, flag_url),
+          away_team:teams!matches_away_team_id_fkey(name, fifa_code, flag_url)
+        ),
+        scorers:scorer_predictions(
+          predicted_goals,
+          player:players(name, team_id,
+            team:teams(fifa_code)
+          )
+        )
+      `)
+      .eq('user_id', id)
+      .order('created_at', { ascending: true })
+      .limit(104)
+    if (error || !data) {
+      // fallback with user session (works for own profile)
+      return supabase
+        .from('match_predictions')
+        .select(`
+          id, predicted_home_score, predicted_away_score, created_at,
+          match:matches(
+            id, match_number, phase, kickoff_at, status, home_score, away_score,
+            home_team:teams!matches_home_team_id_fkey(name, fifa_code, flag_url),
+            away_team:teams!matches_away_team_id_fkey(name, fifa_code, flag_url)
+          ),
+          scorers:scorer_predictions(
+            predicted_goals,
+            player:players(name, team_id,
+              team:teams(fifa_code)
+            )
+          )
+        `)
+        .eq('user_id', id)
+        .order('created_at', { ascending: true })
+        .limit(104)
+    }
+    return { data }
+  }
 
   const [{ data: profile }, { data: snapshot }, { data: recentScores }, { data: globalPred }, { data: matchPreds }] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', id).single(),
@@ -41,25 +88,7 @@ export default async function UserProfilePage({ params }: { params: Promise<{ id
       `)
       .eq('user_id', id)
       .maybeSingle(),
-    admin
-      .from('match_predictions')
-      .select(`
-        id, predicted_home_score, predicted_away_score, created_at,
-        match:matches(
-          id, match_number, phase, kickoff_at, status, home_score, away_score,
-          home_team:teams!matches_home_team_id_fkey(name, fifa_code, flag_url),
-          away_team:teams!matches_away_team_id_fkey(name, fifa_code, flag_url)
-        ),
-        scorers:scorer_predictions(
-          predicted_goals,
-          player:players(name, team_id,
-            team:teams(fifa_code)
-          )
-        )
-      `)
-      .eq('user_id', id)
-      .order('created_at', { ascending: true })
-      .limit(104),
+    matchPredsQuery(),
   ])
 
   if (!profile) notFound()
@@ -194,81 +223,85 @@ export default async function UserProfilePage({ params }: { params: Promise<{ id
         </CardHeader>
         <CardContent className="space-y-0 pt-0">
           {(matchPreds?.length ?? 0) === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-4">Sin predicciones de partidos aún.</p>
+            <p className="text-sm text-muted-foreground text-center py-4">Sin predicciones aún.</p>
           )}
           {(matchPreds ?? []).map((mp) => {
             const m = mp.match as any
             const finished = m?.status === 'finished'
+            const live = m?.status === 'live'
             const hs = m?.home_score as number | null
             const as_ = m?.away_score as number | null
             const ph = mp.predicted_home_score as number
             const pa = mp.predicted_away_score as number
 
-            // Determine outcome label/color
-            let outcomeClass = 'border-border/30'
-            let outcomeTag: string | null = null
+            const predWinner = ph > pa ? m?.home_team?.name : pa > ph ? m?.away_team?.name : 'Empate'
+            const realWinner = (finished && hs !== null && as_ !== null)
+              ? (hs > as_ ? m?.home_team?.name : as_ > hs ? m?.away_team?.name : 'Empate')
+              : null
+
+            const scorerNames = (mp.scorers as any[] ?? [])
+              .map((s: any) => s.predicted_goals > 1 ? `${s.player?.name} ×${s.predicted_goals}` : s.player?.name)
+              .filter(Boolean)
+
+            let outcome: 'exacto' | 'ganador' | 'fallo' | null = null
             if (finished && hs !== null && as_ !== null) {
-              if (ph === hs && pa === as_) {
-                outcomeClass = 'border-l-4 border-l-emerald-500 bg-emerald-500/5'
-                outcomeTag = 'Exacto'
-              } else {
-                const realOutcome = hs > as_ ? 'H' : as_ > hs ? 'A' : 'D'
-                const predOutcome = ph > pa ? 'H' : pa > ph ? 'A' : 'D'
-                if (realOutcome === predOutcome) {
-                  outcomeClass = 'border-l-4 border-l-amber-500 bg-amber-500/5'
-                  outcomeTag = 'Ganador'
-                } else {
-                  outcomeClass = 'border-l-4 border-l-red-500 bg-red-500/5'
-                  outcomeTag = 'Fallo'
-                }
+              if (ph === hs && pa === as_) outcome = 'exacto'
+              else {
+                const rO = hs > as_ ? 'H' : as_ > hs ? 'A' : 'D'
+                const pO = ph > pa ? 'H' : pa > ph ? 'A' : 'D'
+                outcome = rO === pO ? 'ganador' : 'fallo'
               }
-            } else if (m?.status === 'live') {
-              outcomeClass = 'border-l-4 border-l-blue-500 bg-blue-500/5'
             }
 
+            const borderClass = outcome === 'exacto' ? 'border-l-4 border-l-emerald-500 bg-emerald-500/5'
+              : outcome === 'ganador' ? 'border-l-4 border-l-amber-500 bg-amber-500/5'
+              : outcome === 'fallo' ? 'border-l-4 border-l-red-500 bg-red-500/5'
+              : live ? 'border-l-4 border-l-blue-500 bg-blue-500/5'
+              : ''
+
+            const badgeEl = outcome ? (
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ml-1 ${
+                outcome === 'exacto' ? 'bg-emerald-500/20 text-emerald-500' :
+                outcome === 'ganador' ? 'bg-amber-500/20 text-amber-500' :
+                'bg-red-500/20 text-red-500'
+              }`}>
+                {outcome === 'exacto' ? '✓ Exacto' : outcome === 'ganador' ? '~ Ganador' : '✗ Fallo'}
+              </span>
+            ) : live ? <span className="text-[10px] font-bold text-blue-500 ml-1">EN VIVO</span> : null
+
             return (
-              <div key={mp.id} className={`py-2.5 border-b border-border/20 last:border-0 rounded px-1 ${outcomeClass}`}>
-                {/* Score row */}
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono text-muted-foreground w-8 text-right flex-shrink-0">{m?.home_team?.fifa_code ?? '?'}</span>
-                  <span className="font-black text-sm tabular-nums px-1.5 py-0.5 rounded bg-muted">
-                    {ph} – {pa}
-                  </span>
-                  <span className="text-[10px] font-mono text-muted-foreground w-8 flex-shrink-0">{m?.away_team?.fifa_code ?? '?'}</span>
+              <div key={mp.id} className={`py-3 border-b border-border/20 last:border-0 px-1 space-y-1.5 ${borderClass}`}>
+                {/* Match header */}
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">
+                  P{m?.match_number} · {m?.home_team?.fifa_code} vs {m?.away_team?.fifa_code}
+                </p>
 
-                  <div className="flex items-center gap-2 ml-auto flex-shrink-0">
-                    {finished && hs !== null && (
-                      <span className="text-xs text-muted-foreground tabular-nums">
-                        {hs}–{as_}
-                      </span>
+                {/* Predicción row */}
+                <div className="space-y-0.5">
+                  <p className="text-xs">
+                    <span className="text-muted-foreground">Pred: </span>
+                    <span className="font-semibold">Ganador {predWinner}</span>
+                    <span className="text-muted-foreground mx-1">·</span>
+                    <span className="font-semibold tabular-nums">{ph}–{pa}</span>
+                    {scorerNames.length > 0 && (
+                      <>
+                        <span className="text-muted-foreground mx-1">· ⚽</span>
+                        <span className="font-medium">{scorerNames.join(', ')}</span>
+                      </>
                     )}
-                    {m?.status === 'live' && (
-                      <span className="text-[10px] font-bold text-blue-500">EN VIVO</span>
-                    )}
-                    {outcomeTag && (
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                        outcomeTag === 'Exacto' ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' :
-                        outcomeTag === 'Ganador' ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400' :
-                        'bg-red-500/20 text-red-600 dark:text-red-400'
-                      }`}>
-                        {outcomeTag}
-                      </span>
-                    )}
-                  </div>
+                    {badgeEl}
+                  </p>
+
+                  {/* Real result row */}
+                  {finished && realWinner !== null && (
+                    <p className="text-xs text-muted-foreground">
+                      <span>Real: </span>
+                      <span className="font-semibold text-foreground">Ganador {realWinner}</span>
+                      <span className="mx-1">·</span>
+                      <span className="font-semibold text-foreground tabular-nums">{hs}–{as_}</span>
+                    </p>
+                  )}
                 </div>
-
-                {/* Goalscorers */}
-                {(mp.scorers as any[])?.length > 0 && (
-                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 pl-9">
-                    {(mp.scorers as any[]).map((s: any, i: number) => (
-                      <span key={i} className="text-[10px] text-muted-foreground">
-                        ⚽ {s.player?.name ?? '?'}
-                        {s.predicted_goals > 1 && ` ×${s.predicted_goals}`}
-                        <span className="opacity-50 ml-0.5">({s.player?.team?.fifa_code ?? '?'})</span>
-                      </span>
-                    ))}
-                  </div>
-                )}
               </div>
             )
           })}
