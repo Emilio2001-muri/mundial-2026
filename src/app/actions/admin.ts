@@ -229,6 +229,12 @@ export async function syncFixtures(): Promise<{ error?: string; count?: number; 
   revalidatePath('/matches')
   revalidatePath('/bracket')
   revalidatePath('/leaderboard')
+
+  // Advance bracket (promote classified teams to knockout rounds)
+  const { advanceBracket } = await import('@/lib/bracket-advance')
+  await advanceBracket(admin)
+  revalidatePath('/bracket')
+
   return { count: fixtures.length, updated }
 }
 

@@ -81,39 +81,56 @@ function MiniMatch({ m }: { m: MatchWithTeams }) {
 
 // ── Bracket match card ───────────────────────────────────────────
 function BracketMatch({ m, size = 'md' }: { m: MatchWithTeams; size?: 'sm' | 'md' | 'lg' }) {
-  const homeName = m.home_team?.name ?? m.home_placeholder ?? '?'
-  const awayName = m.away_team?.name ?? m.away_placeholder ?? '?'
-  const homeCode = m.home_team?.fifa_code ?? '???'
-  const awayCode = m.away_team?.fifa_code ?? '???'
-  const played = m.status === 'finished'
-  const date = new Date(m.kickoff_at)
-  const isPlaceholder = !m.home_team_id || !m.away_team_id
+  const homeName  = m.home_team?.fifa_code  ?? m.home_placeholder ?? '?'
+  const awayName  = m.away_team?.fifa_code  ?? m.away_placeholder ?? '?'
+  const homeLabel = m.home_team?.name       ?? m.home_placeholder ?? 'Por definir'
+  const awayLabel = m.away_team?.name       ?? m.away_placeholder ?? 'Por definir'
+  const played    = m.status === 'finished'
+  const isLive    = m.status === 'live'
+  const date      = new Date(m.kickoff_at)
+  const homeDef   = !!m.home_team_id
+  const awayDef   = !!m.away_team_id
+  const minW      = size === 'lg' ? 'min-w-[150px]' : 'min-w-[130px]'
+
+  const borderCls = isLive
+    ? 'border-green-500/60 bg-green-500/5'
+    : played
+    ? 'border-border bg-card'
+    : (!homeDef || !awayDef)
+    ? 'border-border/30 bg-card/50'
+    : 'border-border bg-card'
+
+  const rowHome = played && (m.home_score ?? 0) > (m.away_score ?? 0) ? 'font-bold' : ''
+  const rowAway = played && (m.away_score ?? 0) > (m.home_score ?? 0) ? 'font-bold' : ''
 
   return (
-    <div className={`rounded-xl border ${isPlaceholder ? 'border-border/40 opacity-60' : 'border-border'} bg-card overflow-hidden ${size === 'lg' ? 'min-w-[140px]' : 'min-w-[120px]'}`}>
-      <div className={`flex items-center gap-1.5 px-2 py-1.5 ${played && m.home_score! > m.away_score! ? 'font-bold' : ''}`}>
-        {m.home_team?.flag_url && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={m.home_team.flag_url} alt={homeCode} className="w-5 h-3.5 object-cover rounded-sm flex-shrink-0" />
-        )}
-        <span className={`text-xs truncate flex-1 ${isPlaceholder ? 'text-muted-foreground italic' : ''}`}>
-          {isPlaceholder ? m.home_placeholder : homeCode}
+    <div className={`rounded-xl border ${borderCls} overflow-hidden ${minW}`}>
+      {/* Home row */}
+      <div className={`flex items-center gap-1.5 px-2 py-1.5 ${rowHome}`}>
+        {m.home_team?.flag_url
+          ? <img src={m.home_team.flag_url} alt={homeName} className="w-5 h-3.5 object-cover rounded-sm flex-shrink-0" />
+          : <span className="w-5 h-3.5 rounded-sm bg-muted flex-shrink-0 flex items-center justify-center text-[8px] text-muted-foreground">?</span>
+        }
+        <span className={`text-xs flex-1 truncate ${!homeDef ? 'text-muted-foreground italic' : ''}`}>
+          {homeDef ? homeName : homeLabel}
         </span>
-        {played && <span className="text-xs font-bold ml-auto">{m.home_score}</span>}
+        {(played || isLive) && <span className="text-xs font-bold ml-auto tabular-nums">{m.home_score ?? 0}</span>}
       </div>
       <div className="border-t border-border/30" />
-      <div className={`flex items-center gap-1.5 px-2 py-1.5 ${played && m.away_score! > m.home_score! ? 'font-bold' : ''}`}>
-        {m.away_team?.flag_url && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={m.away_team.flag_url} alt={awayCode} className="w-5 h-3.5 object-cover rounded-sm flex-shrink-0" />
-        )}
-        <span className={`text-xs truncate flex-1 ${isPlaceholder ? 'text-muted-foreground italic' : ''}`}>
-          {isPlaceholder ? m.away_placeholder : awayCode}
+      {/* Away row */}
+      <div className={`flex items-center gap-1.5 px-2 py-1.5 ${rowAway}`}>
+        {m.away_team?.flag_url
+          ? <img src={m.away_team.flag_url} alt={awayName} className="w-5 h-3.5 object-cover rounded-sm flex-shrink-0" />
+          : <span className="w-5 h-3.5 rounded-sm bg-muted flex-shrink-0 flex items-center justify-center text-[8px] text-muted-foreground">?</span>
+        }
+        <span className={`text-xs flex-1 truncate ${!awayDef ? 'text-muted-foreground italic' : ''}`}>
+          {awayDef ? awayName : awayLabel}
         </span>
-        {played && <span className="text-xs font-bold ml-auto">{m.away_score}</span>}
+        {(played || isLive) && <span className="text-xs font-bold ml-auto tabular-nums">{m.away_score ?? 0}</span>}
       </div>
-      <div className="bg-muted/40 px-2 py-1 text-[10px] text-muted-foreground text-center">
-        {played ? 'Finalizado' : date.toLocaleDateString('es-MX', {month:'short',day:'numeric'})}
+      {/* Footer */}
+      <div className={`px-2 py-1 text-[10px] text-center ${isLive ? 'bg-green-500/10 text-green-500 font-bold animate-pulse' : 'bg-muted/40 text-muted-foreground'}`}>
+        {isLive ? 'EN VIVO' : played ? 'Finalizado' : date.toLocaleDateString('es-MX', {month:'short', day:'numeric'})}
       </div>
     </div>
   )

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { fetchLiveFixtures } from '@/lib/football-data'
+import { advanceBracket } from '@/lib/bracket-advance'
 
 // Public endpoint called by client-side polling
 // Rate-limited by Next.js cache: max 1 real API call per 30s
@@ -52,6 +53,11 @@ export async function GET() {
     }).eq('id', match.id)
 
     updated++
+  }
+
+  // After updating scores, advance bracket (promote winners/classified teams)
+  if (updated > 0) {
+    await advanceBracket(admin)
   }
 
   return NextResponse.json({
