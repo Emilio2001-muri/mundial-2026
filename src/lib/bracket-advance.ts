@@ -110,14 +110,13 @@ async function promoteTeams(
 
 /**
  * Main entry: calculate all group standings and advance teams to R32.
- * Safe to call after every score update.
+ * Also advances KO rounds when matches finish. Safe to call after every score update.
  */
 export async function advanceBracket(admin: SupabaseClient): Promise<void> {
   const GROUPS = ['A','B','C','D','E','F','G','H','I','J','K','L']
   const standings: Record<string, Standing[]> = {}
   const complete: Record<string, boolean> = {}
 
-  // Compute standings for all groups in parallel
   await Promise.all(
     GROUPS.map(async (g) => {
       standings[g] = await computeGroupStandings(admin, g)
@@ -125,107 +124,67 @@ export async function advanceBracket(admin: SupabaseClient): Promise<void> {
     })
   )
 
-  const first = (g: string) => complete[g] ? standings[g][0]?.team_id ?? null : null
+  const first  = (g: string) => complete[g] ? standings[g][0]?.team_id ?? null : null
   const second = (g: string) => complete[g] ? standings[g][1]?.team_id ?? null : null
 
-  // Matches 73-88: standard 1st/2nd placements
-  // 73: 1ºA vs 2ºB
+  // R32 — standard 1st/2nd placements (match numbers from migration 006)
   await promoteTeams(admin, 73, first('A'), second('B'))
-  // 74: 1ºC vs 2ºD
   await promoteTeams(admin, 74, first('C'), second('D'))
-  // 75: 1ºB vs 2ºA
   await promoteTeams(admin, 75, first('B'), second('A'))
-  // 76: 1ºD vs 2ºC
   await promoteTeams(admin, 76, first('D'), second('C'))
-  // 77: 1ºE vs 3rd best (TBD when groups done)
   await promoteTeams(admin, 77, first('E'), null)
-  // 78: 1ºG vs 3rd best
   await promoteTeams(admin, 78, first('G'), null)
-  // 79: 1ºF vs 3rd best
   await promoteTeams(admin, 79, first('F'), null)
-  // 80: 1ºH vs 2nd from E/F/G (take best available)
   await promoteTeams(admin, 80, first('H'), second('F') ?? second('E') ?? second('G'))
-  // 81: 1ºI vs 2ºJ
   await promoteTeams(admin, 81, first('I'), second('J'))
-  // 82: 1ºK vs 2ºL
   await promoteTeams(admin, 82, first('K'), second('L'))
-  // 83: 1ºJ vs 2ºI
   await promoteTeams(admin, 83, first('J'), second('I'))
-  // 84: 1ºL vs 2ºK
   await promoteTeams(admin, 84, first('L'), second('K'))
 
   // Best 3rd-place teams (matches 85-88): only when all groups complete
-  const allComplete = GROUPS.every(g => complete[g])
-  if (allComplete) {
+  if (GROUPS.every(g => complete[g])) {
     const thirds = GROUPS
       .map(g => standings[g][2])
       .filter(Boolean)
       .sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf)
       .slice(0, 4)
-
     if (thirds[0]) await promoteTeams(admin, 85, thirds[0].team_id, thirds[1]?.team_id ?? null)
     if (thirds[2]) await promoteTeams(admin, 86, thirds[2].team_id, thirds[3]?.team_id ?? null)
-    // 87 and 88 get remaining thirds - already covered above if 4 are placed
   }
 
-  // Advance KO rounds: winners of R32 → R16, R16 winners → QF, etc.
-  await advanceKORound(admin, 'round_of_32', 'round_of_16', [
-    [73, 74, 89], [75, 76, 90], [77, 78, 91], [79, 80, 92],
-    [81, 82, 93], [83, 84, 94], [85, 86, 95], [87, 88, 96],
-  ])
-  await advanceKORound(admin, 'round_of_16', 'quarter_final', [
-    [89, 90, 97], [91, 92, 98], [93, 94, 99], [95, 96, 100],
-  ])
-  await advanceKORound(admin, 'quarter_final', 'semi_final', [
-    [97, 98, 101], [99, 100, 102],
-  ])
-  await advanceKORound(admin, 'semi_final', 'final', [
-    [101, 102, 104],
-  ])
-  // Third place: losers of semis → 103
-  await advanceLosers(admin, [101, 102], 103)
+  // Advance KO rounds
+  await advanceKORound(admin, [[73,74,89],[75,76,90],[77,78,91],[79,80,92],[81,82,93],[83,84,94],[85,86,95],[87,88,96]])
+  await advanceKORound(admin, [[89,90,97],[91,92,98],[93,94,99],[95,96,100]])
+  await advanceKORound(admin, [[97,98,101],[99,100,102]])
+  await advanceKORound(admin, [[101,102,104]])
+  await advanceLosers(admin, [101,102], 103)
 }
 
-async function advanceKORound(
-  admin: SupabaseClient,
-  _fromPhase: string,
-  _toPhase: string,
-  pairs: [number, number, number][]
-) {
+async function advanceKORound(admin: SupabaseClient, pairs: [number,number,number][]) {
   for (const [m1num, m2num, nextNum] of pairs) {
-    const m1 = await getKOMatch(admin, m1num)
-    const m2 = await getKOMatch(admin, m2num)
+    const [m1, m2] = await Promise.all([getKOMatch(admin, m1num), getKOMatch(admin, m2num)])
     if (!m1 || !m2) continue
-
-    const winner1 = m1.status === 'finished' ? getWinner(m1) : null
-    const winner2 = m2.status === 'finished' ? getWinner(m2) : null
-
-    if (winner1 || winner2) {
-      await promoteTeams(admin, nextNum, winner1, winner2)
-    }
+    const w1 = m1.status === 'finished' ? getWinner(m1) : null
+    const w2 = m2.status === 'finished' ? getWinner(m2) : null
+    if (w1 || w2) await promoteTeams(admin, nextNum, w1, w2)
   }
 }
 
-async function advanceLosers(
-  admin: SupabaseClient,
-  matchNums: [number, number],
-  targetNum: number
-) {
-  const [m1, m2] = await Promise.all(matchNums.map(n => getKOMatch(admin, n)))
+async function advanceLosers(admin: SupabaseClient, nums: [number,number], target: number) {
+  const [m1, m2] = await Promise.all(nums.map(n => getKOMatch(admin, n)))
   if (!m1 || !m2) return
-  const loser1 = m1.status === 'finished' ? getLoser(m1) : null
-  const loser2 = m2.status === 'finished' ? getLoser(m2) : null
-  if (loser1 || loser2) await promoteTeams(admin, targetNum, loser1, loser2)
+  const l1 = m1.status === 'finished' ? getLoser(m1) : null
+  const l2 = m2.status === 'finished' ? getLoser(m2) : null
+  if (l1 || l2) await promoteTeams(admin, target, l1, l2)
 }
 
-function getWinner(m: { home_team_id: string; away_team_id: string; home_score?: number | null; away_score?: number | null; home_penalties?: number | null; away_penalties?: number | null }) {
+type KOMatch = { home_team_id: string; away_team_id: string; home_score?: number | null; away_score?: number | null; home_penalties?: number | null; away_penalties?: number | null }
+function getWinner(m: KOMatch): string {
   if (m.home_penalties != null) return m.home_penalties > (m.away_penalties ?? 0) ? m.home_team_id : m.away_team_id
-  if (m.home_score == null) return null
-  return m.home_score >= (m.away_score ?? 0) ? m.home_team_id : m.away_team_id
+  return (m.home_score ?? 0) >= (m.away_score ?? 0) ? m.home_team_id : m.away_team_id
+}
+function getLoser(m: KOMatch): string {
+  if (m.home_penalties != null) return m.home_penalties > (m.away_penalties ?? 0) ? m.away_team_id : m.home_team_id
+  return (m.home_score ?? 0) >= (m.away_score ?? 0) ? m.away_team_id : m.home_team_id
 }
 
-function getLoser(m: { home_team_id: string; away_team_id: string; home_score?: number | null; away_score?: number | null; home_penalties?: number | null; away_penalties?: number | null }) {
-  if (m.home_penalties != null) return m.home_penalties > (m.away_penalties ?? 0) ? m.away_team_id : m.home_team_id
-  if (m.home_score == null) return null
-  return m.home_score >= (m.away_score ?? 0) ? m.away_team_id : m.home_team_id
-}
