@@ -40,7 +40,7 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
   // Get players for both teams
   const teamIds = [match.home_team_id, match.away_team_id].filter(Boolean) as string[]
   const { data: players } = teamIds.length
-    ? await supabase.from('players').select('*').in('team_id', teamIds)
+    ? await supabase.from('players').select('*').in('team_id', teamIds).limit(200)
     : { data: [] }
 
   const homePlayers = (players ?? []).filter((p: Player) => p.team_id === match.home_team_id)
