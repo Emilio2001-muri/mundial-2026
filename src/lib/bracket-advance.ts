@@ -128,52 +128,52 @@ export async function advanceBracket(admin: SupabaseClient): Promise<void> {
   const second = (g: string) => complete[g] ? standings[g][1]?.team_id ?? null : null
   const third  = (g: string) => complete[g] ? standings[g][2]?.team_id ?? null : null
 
-  // R32 — match numbers from migration 007
+  // R32 — match numbers from migration 007 (real FIFA 2026 bracket)
   // 73: 2A vs 2B
   await promoteTeams(admin, 73, second('A'), second('B'))
-  // 74: 1E vs best 3rd of A/B/C/D/F  (best 3rd determined once groups done)
+  // 74: 1E vs 3rd A/B/C/D/F (best 3rd determined once all groups done)
   await promoteTeams(admin, 74, first('E'), null)
-  // 75: 1A vs 3rd C/D/E/F
-  await promoteTeams(admin, 75, first('A'), null)
-  // 76: 1F vs 2C
-  await promoteTeams(admin, 76, first('F'), second('C'))
+  // 75: 1F vs 2C
+  await promoteTeams(admin, 75, first('F'), second('C'))
+  // 76: 1C vs 2F
+  await promoteTeams(admin, 76, first('C'), second('F'))
   // 77: 1I vs 3rd C/D/F/G/H
   await promoteTeams(admin, 77, first('I'), null)
-  // 78: 1G vs 3rd A/E/H/I/J
-  await promoteTeams(admin, 78, first('G'), null)
-  // 79: 1B vs 3rd A/C/D/K/L
-  await promoteTeams(admin, 79, first('B'), null)
-  // 80: 1H vs 2J
-  await promoteTeams(admin, 80, first('H'), second('J'))
+  // 78: 2E vs 2I
+  await promoteTeams(admin, 78, second('E'), second('I'))
+  // 79: 1A vs 3rd C/E/F/H/I
+  await promoteTeams(admin, 79, first('A'), null)
+  // 80: 1L vs 3rd E/H/I/J/K
+  await promoteTeams(admin, 80, first('L'), null)
   // 81: 1D vs 3rd B/E/F/I/J
   await promoteTeams(admin, 81, first('D'), null)
-  // 82: 1C vs 2D
-  await promoteTeams(admin, 82, first('C'), second('D'))
+  // 82: 1G vs 3rd A/E/H/I/J
+  await promoteTeams(admin, 82, first('G'), null)
   // 83: 2K vs 2L
   await promoteTeams(admin, 83, second('K'), second('L'))
-  // 84: 1J vs 2I
-  await promoteTeams(admin, 84, first('J'), second('I'))
-  // 85: 1K vs 3rd G/H/I/J/K/L
-  await promoteTeams(admin, 85, first('K'), null)
-  // 86: 1L vs 2K (after 83 winner)
-  await promoteTeams(admin, 86, first('L'), second('K'))
-  // 87: 2E vs 2F
-  await promoteTeams(admin, 87, second('E'), second('F'))
-  // 88: 2G vs 2H
-  await promoteTeams(admin, 88, second('G'), second('H'))
+  // 84: 1H vs 2J
+  await promoteTeams(admin, 84, first('H'), second('J'))
+  // 85: 1B vs 3rd E/F/G/I/J
+  await promoteTeams(admin, 85, first('B'), null)
+  // 86: 1J vs 2H
+  await promoteTeams(admin, 86, first('J'), second('H'))
+  // 87: 1K vs 3rd D/E/I/J/L
+  await promoteTeams(admin, 87, first('K'), null)
+  // 88: 2D vs 2G
+  await promoteTeams(admin, 88, second('D'), second('G'))
 
-  // Best 3rd-place teams — distributed to the 7 slots that require a 3rd place team.
-  // Each 3rd place faces a 1st place team (never another 3rd).
-  // The specific 3rd → slot mapping depends on which groups produced the best thirds.
-  // We rank all 12 thirds and place them into the away slots of matches 74,75,77,78,79,81,85.
+  // Best 3rd-place teams — distributed to the 6 slots that require a 3rd place team.
+  // Slots: 74(away), 77(away), 79(away), 80(away), 81(away), 82(away), 85(away), 87(away)
+  // In official FIFA rules the specific mapping depends on which groups qualified;
+  // for simplicity we rank all thirds and assign sequentially by points/GD/GF.
   if (GROUPS.every(g => complete[g])) {
     const thirdsRanked = GROUPS
       .map(g => ({ ...standings[g][2], groupName: g }))
       .filter(t => t.team_id)
       .sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf)
 
-    // Slots that need a best-3rd as the away team
-    const thirdSlots = [74, 75, 77, 78, 79, 81, 85]
+    // Away slots that need a best-3rd
+    const thirdSlots = [74, 77, 79, 80, 81, 82, 85, 87]
     for (let i = 0; i < thirdSlots.length && i < thirdsRanked.length; i++) {
       const slot = await getKOMatch(admin, thirdSlots[i])
       if (slot && !slot.away_team_id && slot.status !== 'finished') {
@@ -183,8 +183,9 @@ export async function advanceBracket(admin: SupabaseClient): Promise<void> {
   }
 
   // Advance KO rounds (R32 → R16 → QF → SF → Final)
-  await advanceKORound(admin, [[73,74,89],[75,76,90],[77,78,91],[79,80,92],[81,82,93],[83,84,94],[85,86,95],[87,88,96]])
-  await advanceKORound(admin, [[89,90,97],[91,92,98],[93,94,99],[95,96,100]])
+  // R16 pairings per migration 007: 89=W74vsW77, 90=W73vsW75, 91=W76vsW78, 92=W79vsW80, 93=W83vsW84, 94=W81vsW82, 95=W86vsW88, 96=W85vsW87
+  await advanceKORound(admin, [[74,77,89],[73,75,90],[76,78,91],[79,80,92],[83,84,93],[81,82,94],[86,88,95],[85,87,96]])
+  await advanceKORound(admin, [[89,90,97],[93,94,98],[91,92,99],[95,96,100]])
   await advanceKORound(admin, [[97,98,101],[99,100,102]])
   await advanceKORound(admin, [[101,102,104]])
   await advanceLosers(admin, [101,102], 103)
