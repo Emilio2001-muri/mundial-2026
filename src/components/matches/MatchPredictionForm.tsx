@@ -115,6 +115,7 @@ export function MatchPredictionForm({
                     max={99}
                     disabled={locked}
                     onChange={(e) => field.onChange(Number(e.target.value))}
+                    onFocus={(e) => e.target.select()}
                     className="score-input bg-muted rounded-xl border border-input focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
                   />
                 )}
@@ -143,6 +144,7 @@ export function MatchPredictionForm({
                     max={99}
                     disabled={locked}
                     onChange={(e) => field.onChange(Number(e.target.value))}
+                    onFocus={(e) => e.target.select()}
                     className="score-input bg-muted rounded-xl border border-input focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
                   />
                 )}

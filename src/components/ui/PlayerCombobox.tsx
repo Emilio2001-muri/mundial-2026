@@ -104,7 +104,7 @@ export function PlayerCombobox({
         disabled={disabled}
         className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-sm transition-colors text-left
           ${open ? 'border-ring ring-1 ring-ring' : 'border-input'}
-          ${disabled ? 'opacity-50 cursor-not-allowed bg-muted' : 'bg-background hover:bg-muted/50 cursor-pointer'}`}
+          ${disabled ? 'opacity-50 cursor-not-allowed bg-muted' : 'bg-input hover:bg-muted/50 cursor-pointer'}`}
       >
         <span className={selected ? 'font-medium' : 'text-muted-foreground'}>
           {selected ? selected.name : placeholder}

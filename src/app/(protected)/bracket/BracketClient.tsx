@@ -195,6 +195,7 @@ export function BracketClient({ matches }: BracketClientProps) {
   const byNum = (n: number) => matches.find(m => m.match_number === n)
 
   const groupMatches = matches.filter(m => m.phase === 'group')
+  const r16 = matches.filter(m => m.phase === 'round_of_16').sort((a,b) => a.match_number - b.match_number)
   const qf  = matches.filter(m => m.phase === 'quarter_final').sort((a,b) => a.match_number - b.match_number)
   const sf  = matches.filter(m => m.phase === 'semi_final').sort((a,b) => a.match_number - b.match_number)
   const tp  = matches.filter(m => m.phase === 'third_place')
@@ -321,6 +322,14 @@ export function BracketClient({ matches }: BracketClientProps) {
       {/* FINAL PHASES */}
       {tab === 'final' && (
         <div className="space-y-3">
+          {r16.length > 0 && (
+            <>
+              <SectionHeader>Octavos de Final</SectionHeader>
+              <div className="grid grid-cols-2 gap-3">
+                {r16.map(m => <KOMatchRow key={m.id} m={m} />)}
+              </div>
+            </>
+          )}
           {qf.length > 0 && (
             <>
               <SectionHeader>Cuartos de Final</SectionHeader>
@@ -353,7 +362,7 @@ export function BracketClient({ matches }: BracketClientProps) {
               </div>
             </>
           )}
-          {qf.length === 0 && sf.length === 0 && fin.length === 0 && (
+          {r16.length === 0 && qf.length === 0 && sf.length === 0 && fin.length === 0 && (
             <div className="text-center py-12 text-muted-foreground text-sm">
               Los partidos de fases finales aparecen conforme avance el torneo
             </div>

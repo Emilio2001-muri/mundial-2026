@@ -73,7 +73,7 @@ function TeamCombobox({
         type="button"
         onClick={handleOpen}
         className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border text-sm text-left transition-colors cursor-pointer
-          ${open ? 'border-ring ring-1 ring-ring' : 'border-input'} bg-background hover:bg-muted/50`}
+          ${open ? 'border-ring ring-1 ring-ring' : 'border-input'} bg-input hover:bg-muted/50`}
       >
         <div className="flex items-center gap-2 min-w-0">
           {selected?.flag_url && (
