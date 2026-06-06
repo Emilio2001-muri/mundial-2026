@@ -10,7 +10,7 @@ import { updateMatchResult, rebuildMatchesFromAPI, syncFixtures } from '@/app/ac
 import { recalculateMatchScores } from '@/app/actions/scoring'
 import { phaseLabel } from '@/lib/utils'
 import { ClientTime } from '@/components/ui/ClientTime'
-import { Edit, RefreshCw, Check, X, AlertTriangle, CheckCircle2, DatabaseZap } from 'lucide-react'
+import { Edit, RefreshCw, Check, X, AlertTriangle, CheckCircle2, DatabaseZap, Goal } from 'lucide-react'
 
 interface AdminMatchesClientProps {
   matches: (Match & { home_team?: { fifa_code: string } | null; away_team?: { fifa_code: string } | null })[]
@@ -179,6 +179,10 @@ export function AdminMatchesClient({ matches }: AdminMatchesClientProps) {
                     <Edit className="w-3.5 h-3.5" />
                   </Button>
                 )}
+                {/* Link to events page */}
+                <a href={`/admin/matches/${match.id}`} className="h-8 w-8 flex-shrink-0 flex items-center justify-center rounded-md hover:bg-muted transition-colors">
+                  <Goal className="w-3.5 h-3.5 text-muted-foreground" />
+                </a>
               </div>
             </CardContent>
           </Card>

@@ -1,18 +1,24 @@
 import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+
+export const revalidate = 0
 
 export default async function StatsPage() {
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
-  const [{ data: topScorers }, { data: teams }, { data: matches }] = await Promise.all([
+  const [{ data: topScorers }, { data: teams }, { data: matches }, { data: gkPlayers }] = await Promise.all([
     // Players who scored goals
     supabase
       .from('match_events')
       .select('player_id, players(name, team_id, teams:team_id(name, fifa_code, flag_url))')
-      .eq('event_type', 'goal')
+      .in('event_type', ['goal', 'penalty'])
       .eq('is_own_goal', false),
     supabase.from('teams').select('id, name, fifa_code, flag_url'),
     supabase.from('matches').select('id, home_team_id, away_team_id, home_score, away_score, status').eq('status', 'finished'),
+    supabase.from('players').select('id, name, team_id, teams:team_id(name, fifa_code, flag_url)').eq('position', 'GK'),
   ])
 
   // Aggregate goals per player
@@ -61,6 +67,24 @@ export default async function StatsPage() {
   const bestDefense = [...teamList].sort((a, b) => a.goalsAgainst - b.goalsAgainst).slice(0, 5)
   const totalGoals = teamList.reduce((sum, t) => sum + t.goalsFor, 0)
   const matchesPlayed = (matches ?? []).length
+
+  // GK goals conceded per team (one GK per team — first alphabetically)
+  type GKEntry = { id: string; name: string; teamName: string; teamCode: string; teamFlag: string | null; conceded: number; matchesPlayed: number }
+  const gkByTeam = new Map<string, GKEntry>()
+  for (const gk of gkPlayers ?? []) {
+    const g = gk as unknown as { id: string; name: string; team_id: string; teams: { name: string; fifa_code: string; flag_url: string | null } | null }
+    if (gkByTeam.has(g.team_id)) continue
+    const conceded = (matches ?? []).reduce((acc, m) => {
+      if (m.home_team_id === g.team_id) return acc + (m.away_score ?? 0)
+      if (m.away_team_id === g.team_id) return acc + (m.home_score ?? 0)
+      return acc
+    }, 0)
+    const mp = (matches ?? []).filter(m => m.home_team_id === g.team_id || m.away_team_id === g.team_id).length
+    if (mp > 0) {
+      gkByTeam.set(g.team_id, { id: g.id, name: g.name, teamName: g.teams?.name ?? '', teamCode: g.teams?.fifa_code ?? '', teamFlag: g.teams?.flag_url ?? null, conceded, matchesPlayed: mp })
+    }
+  }
+  const topGKs = Array.from(gkByTeam.values()).sort((a, b) => a.conceded - b.conceded || b.matchesPlayed - a.matchesPlayed).slice(0, 10)
 
   return (
     <div className="space-y-5">
@@ -136,6 +160,26 @@ export default async function StatsPage() {
               <span className="text-sm font-black text-primary">{t.goalsAgainst} en contra</span>
             </div>
           ))}
+        </CardContent>
+      </Card>
+
+      {/* GKs fewest goals conceded */}
+      <Card>
+        <CardHeader><CardTitle>🧤 Porteros — menos goles encajados</CardTitle></CardHeader>
+        <CardContent className="space-y-2 pt-0">
+          {topGKs.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-3 text-center">Sin datos de porteros aún</p>
+          ) : (
+            topGKs.map((g, i) => (
+              <div key={g.id} className="flex items-center gap-3 py-1.5 border-b border-border/40 last:border-0">
+                <span className="w-5 text-center text-sm font-bold text-muted-foreground">{i + 1}</span>
+                {g.teamFlag && <img src={g.teamFlag} alt={g.teamCode} className="w-6 h-4 object-cover rounded" />}
+                <span className="flex-1 text-sm font-medium truncate">{g.teamCode}</span>
+                <span className="text-xs text-muted-foreground">{g.matchesPlayed} PJ</span>
+                <span className="text-sm font-black">{g.conceded} GE</span>
+              </div>
+            ))
+          )}
         </CardContent>
       </Card>
     </div>

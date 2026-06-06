@@ -273,6 +273,88 @@ export async function syncFixtures(): Promise<{ error?: string; count?: number; 
   return { count: fixtures.length, updated }
 }
 
+// ── Add match event (goal, etc.) ─────────────────────────────────
+export async function addMatchEvent(formData: FormData): Promise<{ error?: string }> {
+  await requireAdmin()
+  const admin = createAdminClient()
+  const matchId = formData.get('match_id') as string
+  const playerId = formData.get('player_id') as string || null
+  const teamId = formData.get('team_id') as string
+  const eventType = formData.get('event_type') as string
+  const minute = parseInt(formData.get('minute') as string, 10) || 0
+  const isOwnGoal = formData.get('is_own_goal') === 'true'
+
+  const { error } = await admin.from('match_events').insert({
+    match_id: matchId,
+    team_id: teamId,
+    player_id: playerId || null,
+    event_type: eventType,
+    minute,
+    is_own_goal: isOwnGoal,
+  })
+  if (error) return { error: error.message }
+
+  // Recalculate scores immediately
+  const { recalculateMatchScores } = await import('@/app/actions/scoring')
+  await recalculateMatchScores(matchId)
+
+  revalidatePath('/admin/matches')
+  revalidatePath(`/matches/${matchId}`)
+  return {}
+}
+
+// ── Delete match event ────────────────────────────────────────────
+export async function deleteMatchEvent(formData: FormData): Promise<{ error?: string }> {
+  await requireAdmin()
+  const admin = createAdminClient()
+  const eventId = formData.get('event_id') as string
+  const matchId = formData.get('match_id') as string
+
+  const { error } = await admin.from('match_events').delete().eq('id', eventId)
+  if (error) return { error: error.message }
+
+  const { recalculateMatchScores } = await import('@/app/actions/scoring')
+  await recalculateMatchScores(matchId)
+
+  revalidatePath('/admin/matches')
+  revalidatePath(`/matches/${matchId}`)
+  return {}
+}
+
+// ── Save tournament awards (for scoring global predictions) ───────
+export async function saveTournamentAwards(formData: FormData): Promise<{ error?: string }> {
+  await requireAdmin()
+  const admin = createAdminClient()
+  const TOURNAMENT_ID = 'a1b2c3d4-0000-0000-0000-000000000001'
+
+  const awards = {
+    champion_team_id:      formData.get('champion_team_id') as string || null,
+    runner_up_team_id:     formData.get('runner_up_team_id') as string || null,
+    third_place_team_id:   formData.get('third_place_team_id') as string || null,
+    golden_ball_player_id: formData.get('golden_ball_player_id') as string || null,
+    silver_ball_player_id: formData.get('silver_ball_player_id') as string || null,
+    bronze_ball_player_id: formData.get('bronze_ball_player_id') as string || null,
+    golden_boot_player_id: formData.get('golden_boot_player_id') as string || null,
+    golden_glove_player_id:formData.get('golden_glove_player_id') as string || null,
+    best_young_player_id:  formData.get('best_young_player_id') as string || null,
+  }
+
+  const { error } = await admin
+    .from('tournaments')
+    .update(awards)
+    .eq('id', TOURNAMENT_ID)
+
+  if (error) return { error: error.message }
+
+  // Recalculate global prediction scores
+  const { recalculateGlobalScores } = await import('@/app/actions/scoring')
+  await recalculateGlobalScores(TOURNAMENT_ID)
+
+  revalidatePath('/admin/awards')
+  revalidatePath('/leaderboard')
+  return {}
+}
+
 // ── Create user account ──────────────────────────────────────────
 export async function createUserAccount(
   email: string,
