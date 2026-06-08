@@ -29,11 +29,18 @@ export function LeaderboardClient({ initialData, currentUserId, isPreTournament 
         { event: 'INSERT', schema: 'public', table: 'leaderboard_snapshots' },
         async () => {
           // Re-fetch latest leaderboard on change
-          const { data } = await supabase
-            .from('leaderboard_snapshots')
-            .select('*, profile:profiles(id, display_name, avatar_url, role)')
-            .order('created_at', { ascending: false })
-            .limit(50)
+          const [{ data }, { data: allProfiles }] = await Promise.all([
+            supabase
+              .from('leaderboard_snapshots')
+              .select('*, profile:profiles(id, display_name, avatar_url, role)')
+              .order('created_at', { ascending: false })
+              .limit(200),
+            supabase
+              .from('profiles')
+              .select('id, display_name, avatar_url, role, created_at')
+              .order('created_at', { ascending: true })
+              .limit(200),
+          ])
 
           if (data) {
             const seen = new Set<string>()
@@ -42,7 +49,25 @@ export function LeaderboardClient({ initialData, currentUserId, isPreTournament 
               seen.add(s.user_id)
               return true
             })
-            setEntries([...latest].sort((a, b) => a.rank - b.rank) as SnapshotWithProfile[])
+            const sorted = [...latest].sort((a, b) => a.rank - b.rank) as SnapshotWithProfile[]
+
+            // Append users not yet in any snapshot
+            const missing = (allProfiles ?? [])
+              .filter((p) => !seen.has(p.id))
+              .map((p, i) => ({
+                id: `pre-${p.id}`,
+                user_id: p.id,
+                rank: sorted.length + i + 1,
+                previous_rank: null,
+                total_points: 0,
+                exact_scores_count: 0,
+                success_rate: 0,
+                scorer_points: 0,
+                created_at: p.created_at,
+                profile: p,
+              })) as unknown as SnapshotWithProfile[]
+
+            setEntries([...sorted, ...missing])
           }
         }
       )

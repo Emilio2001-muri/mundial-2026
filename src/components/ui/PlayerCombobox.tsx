@@ -41,9 +41,12 @@ export function PlayerCombobox({
 
   const selected = players.find((p) => p.id === value) ?? null
 
+  const normalize = (s: string) =>
+    s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+
   const filtered = search.trim()
     ? players.filter((p) =>
-        p.name.toLowerCase().includes(search.toLowerCase()) ||
+        normalize(p.name).includes(normalize(search)) ||
         (p.position?.toLowerCase() ?? '').includes(search.toLowerCase())
       )
     : players

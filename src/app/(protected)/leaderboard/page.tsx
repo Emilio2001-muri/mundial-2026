@@ -31,21 +31,26 @@ export default async function LeaderboardPage() {
 
   const sorted = [...latest].sort((a, b) => a.rank - b.rank)
 
-  // If no snapshots yet, show all profiles with rank 0
+  // Include profiles that have no snapshot yet (e.g. registered after last recalculation)
+  const snapshotUserIds = new Set(sorted.map((s) => s.user_id))
+  const missingProfiles = (profiles ?? []).filter((p) => !snapshotUserIds.has(p.id))
+  const nextRank = sorted.length + 1
+  const missingEntries = missingProfiles.map((p, i) => ({
+    id: `pre-${p.id}`,
+    user_id: p.id,
+    rank: nextRank + i,
+    previous_rank: null,
+    total_points: 0,
+    exact_scores_count: 0,
+    success_rate: 0,
+    scorer_points: 0,
+    created_at: p.created_at,
+    profile: p,
+  }))
+
   const preRanking = sorted.length === 0
-    ? (profiles ?? []).map((p, i) => ({
-        id: `pre-${p.id}`,
-        user_id: p.id,
-        rank: i + 1,
-        previous_rank: null,
-        total_points: 0,
-        exact_scores_count: 0,
-        success_rate: 0,
-        scorer_points: 0,
-        created_at: p.created_at,
-        profile: p,
-      }))
-    : sorted
+    ? missingEntries
+    : [...sorted, ...missingEntries]
 
   return <LeaderboardClient initialData={preRanking as any} currentUserId={user?.id ?? ''} isPreTournament={sorted.length === 0} />
 }
