@@ -68,13 +68,15 @@ export async function GET() {
 
     updated++
 
-    // Sync goal events for live/finished matches when score changes or match just finished
+    // Sync goal events:
+    // - always for live matches (so events appear immediately as goals are scored)
+    // - on score change or when match just finished
+    const externalId = match.external_id ?? f.external_id
+    const shouldSyncEvents = f.status === 'live' || scoreChanged || becameFinished
+    if (shouldSyncEvents && externalId) {
+      await syncGoalEvents(admin, match.id, externalId, homeId, awayId)
+    }
     if (scoreChanged || becameFinished) {
-      // Use external_id if stored, otherwise skip player sync
-      const externalId = match.external_id ?? f.external_id
-      if (externalId) {
-        await syncGoalEvents(admin, match.id, externalId, homeId, awayId)
-      }
       matchesToScore.push(match.id)
     }
   }
@@ -189,6 +191,8 @@ async function syncGoalEvents(
       minute: g.minute + (g.injuryTime ?? 0),
       is_penalty: g.type === 'PENALTY',
       is_own_goal: g.type === 'OWN',
+      // Always store raw scorer name so we can display it even when player_id is null
+      metadata: g.scorerName ? { scorer_name: g.scorerName } : null,
     }
   })
 

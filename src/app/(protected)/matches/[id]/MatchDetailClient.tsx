@@ -164,9 +164,9 @@ export function MatchDetailClient({
               <h3 className="font-bold text-sm mb-3">Eventos del partido</h3>
               <div className="space-y-2">
                 {events.filter((e) => ['goal', 'own_goal', 'penalty'].includes(e.event_type)).map((e) => {
-                  const ev = e as typeof e & { player?: { name: string } | null; team?: { fifa_code: string } | null }
+                  const ev = e as typeof e & { player?: { name: string } | null; team?: { fifa_code: string } | null; metadata?: { scorer_name?: string } | null }
                   const icon = ev.event_type === 'own_goal' ? '⚽ (AG)' : ev.event_type === 'penalty' ? '⚽ (P)' : '⚽'
-                  const playerName = ev.player?.name ?? 'Desconocido'
+                  const playerName = ev.player?.name ?? ev.metadata?.scorer_name ?? 'Desconocido'
                   const teamCode = ev.team?.fifa_code ?? ''
                   return (
                     <div key={e.id} className="flex items-center gap-3 text-sm">

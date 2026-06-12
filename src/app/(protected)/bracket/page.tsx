@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { BracketClient } from './BracketClient'
 import type { MatchWithTeams } from '@/types'
 
-export const revalidate = 30
+export const dynamic = 'force-dynamic'
 
 export default async function BracketPage() {
   const supabase = await createClient()

@@ -34,7 +34,7 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
       .eq('match_id', id)
       .eq('user_id', user.id)
       .maybeSingle(),
-    supabase.from('match_events').select('*, player:players(id, name), team:teams(id, fifa_code)').eq('match_id', id).order('minute'),
+    supabase.from('match_events').select('*, player:players(id, name), team:teams(id, fifa_code), metadata').eq('match_id', id).order('minute'),
     supabase.from('lineups').select('*').eq('match_id', id),
   ])
 

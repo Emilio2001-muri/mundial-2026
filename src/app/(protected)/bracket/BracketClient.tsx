@@ -23,7 +23,8 @@ function computeStandings(gm: MatchWithTeams[]): Standing[] {
   }
   for (const m of gm) {
     ensure(m,'home'); ensure(m,'away')
-    if (!m.home_team || !m.away_team || m.status !== 'finished' || m.home_score == null || m.away_score == null) continue
+    // Include live matches so standings update in real time
+    if (!m.home_team || !m.away_team || !['finished','live'].includes(m.status) || m.home_score == null || m.away_score == null) continue
     const h = map[m.home_team.id], a = map[m.away_team.id]
     h.p++; a.p++; h.gf += m.home_score; h.ga += m.away_score; a.gf += m.away_score; a.ga += m.home_score
     if (m.home_score > m.away_score) { h.w++; h.pts+=3; a.l++ }
@@ -256,7 +257,14 @@ export function BracketClient({ matches }: BracketClientProps) {
               <div key={grp} className="rounded-2xl border border-border bg-card overflow-hidden">
                 <div className="bg-primary/10 px-4 py-2 flex items-center justify-between">
                   <h2 className="font-black text-sm">Grupo {grp}</h2>
-                  <span className="text-xs text-muted-foreground">{gm.filter(m => m.status === 'finished').length}/{gm.length}</span>
+                  <div className="flex items-center gap-2">
+                    {gm.some(m => m.status === 'live') && (
+                      <span className="flex items-center gap-1 text-[10px] font-bold text-green-500">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />EN VIVO
+                      </span>
+                    )}
+                    <span className="text-xs text-muted-foreground">{gm.filter(m => ['finished','live'].includes(m.status)).length}/{gm.length}</span>
+                  </div>
                 </div>
                 {standings.length > 0 && (
                   <div className="px-3 py-2">

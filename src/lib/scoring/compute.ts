@@ -97,41 +97,53 @@ export async function doRecalculateLeaderboard(tournamentId: string, admin: Admi
   const { data: profiles } = await admin.from('profiles').select('id, display_name, avatar_url')
   if (!profiles?.length) return
 
-  const { data: scoreData } = await admin
-    .from('prediction_scores')
-    .select('user_id, category, points')
+  const [{ data: scoreData }, { data: predStats }, { data: finishedMatchData }] = await Promise.all([
+    admin.from('prediction_scores').select('user_id, category, points, match_id'),
+    admin.from('match_predictions').select('user_id, match_id'),
+    admin.from('matches').select('id').eq('status', 'finished'),
+  ])
 
-  const { data: predStats } = await admin
-    .from('match_predictions')
-    .select('user_id, status')
-
-  interface ScoreRow { user_id: string; category: string; points: number }
-  interface PredRow  { user_id: string; status: string }
+  interface ScoreRow { user_id: string; category: string; points: number; match_id: string | null }
+  interface PredRow  { user_id: string; match_id: string }
 
   const scores = (scoreData ?? []) as ScoreRow[]
   const preds  = (predStats ?? []) as PredRow[]
+  const finishedMatchIds = new Set((finishedMatchData ?? []).map((m) => m.id))
 
   const snapshots = profiles.map((profile) => {
     const myScores = scores.filter((s) => s.user_id === profile.id)
     const totalPoints = myScores.reduce((sum, s) => sum + s.points, 0)
-    const exactScoresCount = myScores.filter((s) => s.category === 'exact_score').length
-    const winnersCount     = myScores.filter((s) => s.category === 'correct_winner').length
-    const scorerPoints     = myScores.filter((s) => s.category === 'scorer_goal').reduce((sum, s) => sum + s.points, 0)
-    const globalPoints     = myScores.filter((s) =>
+    const scorerPoints = myScores.filter((s) => s.category === 'scorer_goal').reduce((sum, s) => sum + s.points, 0)
+    const globalPoints = myScores.filter((s) =>
       ['global_champion','global_runner_up','global_third','global_finalist',
        'golden_ball','silver_ball','bronze_ball','golden_boot','golden_glove','best_young']
         .includes(s.category)
     ).reduce((sum, s) => sum + s.points, 0)
 
-    const myPreds  = preds.filter((p) => p.user_id === profile.id)
-    const scored   = myPreds.filter((p) => p.status === 'scored').length
-    const successRate = scored > 0 ? Math.round(((exactScoresCount + winnersCount) / scored) * 100) : 0
+    // exact_scores_count: distinct matches where user got exact score
+    const exactMatchIds = new Set(
+      myScores.filter((s) => s.match_id && s.category === 'exact_score').map((s) => s.match_id!)
+    )
+    const exactScoresCount = exactMatchIds.size
+
+    // success_rate: (distinct matches w/ correct winner or exact) / (total finished matches predicted)
+    const winnerMatchIds = new Set(
+      myScores
+        .filter((s) => s.match_id && (s.category === 'exact_score' || s.category === 'correct_winner'))
+        .map((s) => s.match_id!)
+    )
+    const myFinishedPredCount = preds.filter(
+      (p) => p.user_id === profile.id && finishedMatchIds.has(p.match_id)
+    ).length
+    const successRate = myFinishedPredCount > 0
+      ? Math.round((winnerMatchIds.size / myFinishedPredCount) * 100)
+      : 0
 
     return {
       user_id: profile.id,
       total_points: totalPoints,
       exact_scores_count: exactScoresCount,
-      winners_count: winnersCount,
+      winners_count: winnerMatchIds.size,
       scorer_points: scorerPoints,
       global_points: globalPoints,
       success_rate: successRate,
