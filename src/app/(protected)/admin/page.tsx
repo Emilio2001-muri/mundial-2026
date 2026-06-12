@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { cleanupOldData } from '@/app/actions/admin'
+import { cleanupOldData, rescoreAllFinishedMatches } from '@/app/actions/admin'
 import { CleanupButton } from './CleanupButton'
 
 export const revalidate = 0
@@ -36,10 +36,30 @@ export default async function AdminPage() {
       <div className="rounded-2xl border border-border bg-card p-4 space-y-2">
         <p className="font-bold text-sm">🗑 Limpieza de almacenamiento</p>
         <p className="text-xs text-muted-foreground">
-          Elimina snapshots de leaderboard antiguos y filas de 0 puntos.
-          Las predicciones de usuarios nunca se borran.
+          Elimina snapshots de leaderboard antiguos. Las predicciones nunca se borran.
         </p>
-        <CleanupButton action={cleanupOldData} />
+        <CleanupButton action={cleanupOldData} label="Ejecutar limpieza" />
+      </div>
+
+      {/* Re-score finished matches */}
+      <div className="rounded-2xl border border-border bg-card p-4 space-y-2">
+        <p className="font-bold text-sm">🔄 Re-calcular puntos</p>
+        <p className="text-xs text-muted-foreground">
+          Recalcula los puntos de todos los partidos finalizados. Arregla textos de puntuación
+          incorrectos y actualiza el leaderboard.
+        </p>
+        <CleanupButton
+          action={async () => {
+            'use server'
+            const result = await rescoreAllFinishedMatches()
+            const deleted: Record<string, number> = result.rescored > 0
+              ? { partidos_recalculados: result.rescored }
+              : {}
+            return { deleted }
+          }}
+          label="Recalcular todo"
+          confirm="¿Recalcular puntos de todos los partidos finalizados?"
+        />
       </div>
     </div>
   )

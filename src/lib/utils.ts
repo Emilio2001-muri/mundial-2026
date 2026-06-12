@@ -110,6 +110,27 @@ export function phaseLabel(phase: string): string {
   return map[phase] ?? phase
 }
 
+// UUID pattern: 8-4-4-4-12 hex chars
+const UUID_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi
+
+/**
+ * Clean up legacy reason texts that contain raw UUIDs.
+ * Old engine versions stored prediction/team IDs in the reason string.
+ */
+export function cleanReason(reason: string): string {
+  if (!UUID_PATTERN.test(reason)) return reason
+  UUID_PATTERN.lastIndex = 0 // reset after test()
+  return reason
+    // "predijiste {uuid} y acertaste" → "acertaste"
+    .replace(/predijiste [0-9a-f-]{36} y acertaste\.?/gi, 'acertaste el resultado.')
+    // Any remaining bare UUIDs → strip
+    .replace(UUID_PATTERN, '')
+    // Clean up double spaces / trailing punctuation
+    .replace(/\s{2,}/g, ' ')
+    .replace(/:\s*\./g, '.')
+    .trim()
+}
+
 /**
  * Haptic feedback (mobile, if available).
  */

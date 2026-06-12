@@ -392,7 +392,36 @@ export async function createUserAccount(
   return {}
 }
 
-// ── Cleanup old data (free up Supabase storage) ──────────────────
+// ── Re-score ALL finished matches ────────────────────────────────
+// Regenerates prediction_scores with clean reason text.
+// Safe: skips matches without scores, never touches prediction rows.
+export async function rescoreAllFinishedMatches(): Promise<{ error?: string; rescored: number }> {
+  await requireAdmin()
+  const admin = createAdminClient()
+  const { doScoreMatch } = await import('@/lib/scoring/compute')
+
+  const { data: matches } = await admin
+    .from('matches')
+    .select('id')
+    .eq('status', 'finished')
+
+  if (!matches?.length) return { rescored: 0 }
+
+  let rescored = 0
+  for (const m of matches) {
+    try {
+      await doScoreMatch(m.id, admin)
+      rescored++
+    } catch {
+      // skip individual failures
+    }
+  }
+
+  revalidatePath('/dashboard')
+  revalidatePath('/leaderboard')
+  return { rescored }
+}
+
 // Safe: NEVER touches match_predictions, scorer_predictions, global_predictions,
 // or prediction_scores (those represent real user data).
 export async function cleanupOldData(): Promise<{ error?: string; deleted: Record<string, number> }> {

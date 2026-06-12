@@ -77,7 +77,7 @@ export async function fetchLiveFixtures(): Promise<{ fixtures: FixtureUpdate[]; 
   try {
     const res = await fetch(`${API_BASE}/competitions/${COMPETITION_ID}/matches`, {
       headers: { 'X-Auth-Token': apiKey },
-      next: { revalidate: 30 },
+      next: { revalidate: 15 }, // Server-side cache: 15s deduplicate across concurrent users
     })
     if (!res.ok) {
       const text = await res.text()

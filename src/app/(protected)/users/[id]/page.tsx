@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Trophy, Target, Zap, TrendingUp, Globe, Swords } from 'lucide-react'
+import { cleanReason } from '@/lib/utils'
 
 export const revalidate = 0
 
@@ -169,7 +170,7 @@ export default async function UserProfilePage({ params }: { params: Promise<{ id
                     {matchLabel && (
                       <p className="text-[10px] text-muted-foreground font-mono mb-0.5">{matchLabel}</p>
                     )}
-                    <p className="text-sm text-muted-foreground">{s.reason}</p>
+                    <p className="text-sm text-muted-foreground">{cleanReason(s.reason)}</p>
                   </div>
                   <Badge variant={s.points > 0 ? 'success' : 'outline'} className="shrink-0">+{s.points}</Badge>
                 </div>

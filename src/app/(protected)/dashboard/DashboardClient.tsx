@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import type { Profile } from '@/types'
 import Link from 'next/link'
 import { ClientTime } from '@/components/ui/ClientTime'
+import { cleanReason } from '@/lib/utils'
 
 interface DashboardClientProps {
   profile: Profile
@@ -181,7 +182,7 @@ export function DashboardClient({
                     {matchLabel && (
                       <p className="text-[10px] text-muted-foreground font-mono mb-0.5">{matchLabel}</p>
                     )}
-                    <p className="text-sm text-muted-foreground">{score.reason}</p>
+                    <p className="text-sm text-muted-foreground">{cleanReason(score.reason)}</p>
                   </div>
                   <Badge variant={score.points > 0 ? 'success' : 'secondary'} className="shrink-0">
                     +{score.points}

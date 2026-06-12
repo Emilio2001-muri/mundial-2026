@@ -4,14 +4,17 @@ import { useState } from 'react'
 
 interface Props {
   action: () => Promise<{ error?: string; deleted: Record<string, number> }>
+  label?: string
+  confirm?: string
 }
 
-export function CleanupButton({ action }: Props) {
+export function CleanupButton({ action, label = 'Ejecutar', confirm: confirmMsg }: Props) {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<string | null>(null)
 
   async function run() {
-    if (!confirm('¿Limpiar datos antiguos? Las predicciones de usuarios NO se tocarán.')) return
+    const msg = confirmMsg ?? '¿Continuar?'
+    if (!window.confirm(msg)) return
     setLoading(true)
     setResult(null)
     try {
@@ -20,7 +23,7 @@ export function CleanupButton({ action }: Props) {
         setResult(`Error: ${res.error}`)
       } else {
         const parts = Object.entries(res.deleted).map(([k, v]) => `${k}: ${v}`)
-        setResult(parts.length ? `Eliminados — ${parts.join(', ')}` : 'Nada que limpiar.')
+        setResult(parts.length ? `✓ ${parts.join(', ')}` : 'Nada que procesar.')
       }
     } finally {
       setLoading(false)
@@ -34,7 +37,7 @@ export function CleanupButton({ action }: Props) {
         disabled={loading}
         className="px-3 py-1.5 rounded-lg bg-destructive/10 text-destructive text-xs font-semibold hover:bg-destructive/20 transition-colors disabled:opacity-50"
       >
-        {loading ? 'Limpiando…' : 'Ejecutar limpieza'}
+        {loading ? 'Procesando…' : label}
       </button>
       {result && <p className="text-xs text-muted-foreground">{result}</p>}
     </div>
