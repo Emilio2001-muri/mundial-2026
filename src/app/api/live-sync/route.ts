@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { fetchLiveFixtures, fetchMatchGoals } from '@/lib/football-data'
 import { advanceBracket } from '@/lib/bracket-advance'
-import { doScoreMatch } from '@/lib/scoring/compute'
+import { doScoreMatch, doRecalculateLeaderboard } from '@/lib/scoring/compute'
 
 // Public endpoint called by client-side polling.
 // No caching — always fetches fresh from football-data.org.
@@ -91,6 +91,49 @@ export async function GET() {
     } catch (e) {
       console.error('[live-sync] scoring error', matchId, e)
     }
+  }
+
+  // Always recalculate leaderboard so success_rate is never stale
+  // (doScoreMatch already does this when matches score, but we need it
+  // even when no match scored in this poll to fix old 0% snapshots)
+  if (matchesToScore.length === 0) {
+    try {
+      await doRecalculateLeaderboard(TOURNAMENT_ID, admin)
+    } catch (e) {
+      console.error('[live-sync] leaderboard recalc error', e)
+    }
+  }
+
+  // Catch-up: sync goal events for recently finished matches that have
+  // no goal events yet — handles matches that finished before the poller
+  // started or where the initial event sync failed.
+  try {
+    const { data: finishedMatches } = await admin
+      .from('matches')
+      .select('id, external_id, home_team_id, away_team_id, home_score, away_score')
+      .eq('tournament_id', TOURNAMENT_ID)
+      .eq('status', 'finished')
+      .not('external_id', 'is', null)
+      .order('kickoff_at', { ascending: false })
+      .limit(10)
+
+    let catchupCount = 0
+    for (const m of finishedMatches ?? []) {
+      if (catchupCount >= 2) break // max 2 API calls per poll (rate limit)
+      const totalGoals = (m.home_score ?? 0) + (m.away_score ?? 0)
+      if (totalGoals === 0) continue // 0-0 match, nothing to sync
+      const { count } = await admin
+        .from('match_events')
+        .select('id', { count: 'exact', head: true })
+        .eq('match_id', m.id)
+        .in('event_type', ['goal', 'penalty', 'own_goal'])
+      if ((count ?? 0) === 0 && m.home_team_id && m.away_team_id) {
+        await syncGoalEvents(admin, m.id, m.external_id!, m.home_team_id, m.away_team_id)
+        catchupCount++
+      }
+    }
+  } catch (e) {
+    console.error('[live-sync] catchup events error', e)
   }
 
   return NextResponse.json({
