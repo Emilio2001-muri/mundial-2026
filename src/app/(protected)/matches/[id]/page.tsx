@@ -3,6 +3,9 @@ import { createClient } from '@/lib/supabase/server'
 import { MatchDetailClient } from './MatchDetailClient'
 import type { MatchWithTeams, MatchPrediction, ScorerPrediction, Player, Lineup, MatchEvent } from '@/types'
 
+// Always fetch fresh data so live scores update on router.refresh()
+export const dynamic = 'force-dynamic'
+
 export default async function MatchDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createClient()
@@ -27,11 +30,11 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
       .single(),
     supabase
       .from('match_predictions')
-      .select('*, scorer_predictions(*)')
+      .select('*, scorer_predictions(*, player:players(id, name))')
       .eq('match_id', id)
       .eq('user_id', user.id)
       .maybeSingle(),
-    supabase.from('match_events').select('*').eq('match_id', id),
+    supabase.from('match_events').select('*, player:players(id, name), team:teams(id, fifa_code)').eq('match_id', id).order('minute'),
     supabase.from('lineups').select('*').eq('match_id', id),
   ])
 

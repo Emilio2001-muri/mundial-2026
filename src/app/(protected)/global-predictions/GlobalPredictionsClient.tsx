@@ -42,6 +42,7 @@ interface GlobalPredictionsClientProps {
   locked: boolean
   isAdmin: boolean
   lockAt: string | null
+  adminUnlocked: boolean
 }
 
 // Team combobox (reuses PlayerCombobox style but for teams)
@@ -145,14 +146,14 @@ function TeamCombobox({
 }
 
 export function GlobalPredictionsClient({
-  existingPrediction, teams, players, locked, isAdmin, lockAt,
+  existingPrediction, teams, players, locked, isAdmin, lockAt, adminUnlocked,
 }: GlobalPredictionsClientProps) {
   const [isPending, startTransition] = useTransition()
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Locked only when tournament lock date has passed
-  const effectiveLocked = locked
+  // Admin can unlock a specific user's prediction even after the lock date
+  const effectiveLocked = locked && !adminUnlocked
 
   // Filtered player lists by position
   const goalkeepers = players.filter(p => p.position === 'GK')
@@ -259,6 +260,17 @@ export function GlobalPredictionsClient({
             {updatedDate && (
               <p className="text-xs text-muted-foreground pl-5">Actualizado el {updatedDate}</p>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {adminUnlocked && locked && (
+        <Card className="border-amber-500/30 bg-amber-500/5">
+          <CardContent className="py-3 px-4">
+            <p className="text-sm text-amber-700 dark:text-amber-400 font-medium flex items-center gap-2">
+              <Lock className="w-4 h-4" />
+              El admin desbloqueó tus predicciones. Guarda los cambios antes de que se vuelvan a bloquear.
+            </p>
           </CardContent>
         </Card>
       )}

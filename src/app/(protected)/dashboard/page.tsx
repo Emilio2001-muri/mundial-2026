@@ -25,7 +25,15 @@ export default async function DashboardPage() {
         .limit(5),
       supabase
         .from('prediction_scores')
-        .select('points, category, reason, created_at, match_id')
+        .select(`
+          points, category, reason, created_at, match_id,
+          match:matches(
+            id,
+            home_score, away_score, status,
+            home_team:teams!matches_home_team_id_fkey(fifa_code),
+            away_team:teams!matches_away_team_id_fkey(fifa_code)
+          )
+        `)
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(10),

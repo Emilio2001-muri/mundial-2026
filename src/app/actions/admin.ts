@@ -42,10 +42,11 @@ export async function deleteGlobalPrediction(formData: FormData) {
 
 // ── Unlock global prediction (allows user to re-edit) ────────────
 export async function unlockGlobalPrediction(formData: FormData) {
-  const supabase = await requireAdmin()
+  await requireAdmin()
+  const admin = createAdminClient()
   const id = formData.get('prediction_id') as string
-  // Clear submitted_at so the client treats it as editable again
-  await supabase.from('global_predictions').update({ submitted_at: null }).eq('id', id)
+  // Set admin_unlocked so the client bypasses the tournament lock gate
+  await admin.from('global_predictions').update({ admin_unlocked: true, submitted_at: null }).eq('id', id)
   revalidatePath('/admin/audit')
 }
 
@@ -313,8 +314,20 @@ export async function deleteMatchEvent(formData: FormData): Promise<{ error?: st
   const { error } = await admin.from('match_events').delete().eq('id', eventId)
   if (error) return { error: error.message }
 
-  const { recalculateMatchScores } = await import('@/app/actions/scoring')
-  await recalculateMatchScores(matchId)
+  // Only recalculate if the match already has a valid finished result.
+  // Skipping recalculation when the match has no score prevents wiping
+  // existing prediction_scores when the admin is correcting events on a
+  // match whose result hasn't been entered yet.
+  const { data: match } = await admin
+    .from('matches')
+    .select('status, home_score, away_score')
+    .eq('id', matchId)
+    .single()
+
+  if (match?.status === 'finished' && match?.home_score !== null && match?.away_score !== null) {
+    const { recalculateMatchScores } = await import('@/app/actions/scoring')
+    await recalculateMatchScores(matchId)
+  }
 
   revalidatePath('/admin/matches')
   revalidatePath(`/matches/${matchId}`)
@@ -377,5 +390,51 @@ export async function createUserAccount(
   })
   revalidatePath('/admin/users')
   return {}
+}
+
+// ── Cleanup old data (free up Supabase storage) ──────────────────
+// Safe: NEVER touches match_predictions, scorer_predictions, global_predictions,
+// or prediction_scores (those represent real user data).
+export async function cleanupOldData(): Promise<{ error?: string; deleted: Record<string, number> }> {
+  await requireAdmin()
+  const admin = createAdminClient()
+  const deleted: Record<string, number> = {}
+
+  // Keep only the 3 most-recent leaderboard snapshot batches per tournament.
+  // Each batch = one recalculation run (all users share same created_at minute).
+  const { data: allSnapshots } = await admin
+    .from('leaderboard_snapshots')
+    .select('id, tournament_id, created_at')
+    .order('created_at', { ascending: false })
+
+  if (allSnapshots?.length) {
+    const byTournament: Record<string, { id: string; created_at: string }[]> = {}
+    for (const s of allSnapshots) {
+      if (!byTournament[s.tournament_id]) byTournament[s.tournament_id] = []
+      byTournament[s.tournament_id].push({ id: s.id, created_at: s.created_at })
+    }
+
+    const idsToDelete: string[] = []
+    for (const rows of Object.values(byTournament)) {
+      // Distinct batches (truncated to minute)
+      const batches = [...new Set(rows.map((r) => r.created_at.slice(0, 16)))]
+      const keepBatches = new Set(batches.slice(0, 3))
+      for (const r of rows) {
+        if (!keepBatches.has(r.created_at.slice(0, 16))) {
+          idsToDelete.push(r.id)
+        }
+      }
+    }
+
+    if (idsToDelete.length) {
+      for (let i = 0; i < idsToDelete.length; i += 500) {
+        await admin.from('leaderboard_snapshots').delete().in('id', idsToDelete.slice(i, i + 500))
+      }
+      deleted.leaderboard_snapshots = idsToDelete.length
+    }
+  }
+
+  revalidatePath('/admin')
+  return { deleted }
 }
 

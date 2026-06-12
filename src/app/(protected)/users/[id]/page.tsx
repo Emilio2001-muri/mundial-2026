@@ -41,7 +41,14 @@ export default async function UserProfilePage({ params }: { params: Promise<{ id
       .maybeSingle(),
     supabase
       .from('prediction_scores')
-      .select('points, category, reason, created_at')
+      .select(`
+        points, category, reason, created_at, match_id,
+        match:matches(
+          id, home_score, away_score, status,
+          home_team:teams!matches_home_team_id_fkey(fifa_code),
+          away_team:teams!matches_away_team_id_fkey(fifa_code)
+        )
+      `)
       .eq('user_id', id)
       .order('created_at', { ascending: false })
       .limit(20),
@@ -139,12 +146,35 @@ export default async function UserProfilePage({ params }: { params: Promise<{ id
         <Card>
           <CardHeader><CardTitle>Puntos recientes</CardTitle></CardHeader>
           <CardContent className="space-y-2 pt-0">
-            {recentScores!.map((s, i) => (
-              <div key={i} className="flex items-start justify-between py-2 border-b border-border/40 last:border-0">
-                <p className="text-sm text-muted-foreground flex-1 pr-3">{s.reason}</p>
-                <Badge variant={s.points > 0 ? 'success' : 'outline'}>+{s.points}</Badge>
-              </div>
-            ))}
+            {(recentScores as unknown as Array<{
+              points: number
+              reason: string
+              created_at: string
+              match: {
+                id: string
+                home_score: number | null
+                away_score: number | null
+                status: string
+                home_team: { fifa_code: string } | null
+                away_team: { fifa_code: string } | null
+              } | null
+            }>).map((s, i) => {
+              const m = s.match
+              const matchLabel = m?.home_team && m?.away_team
+                ? `${m.home_team.fifa_code} ${m.home_score ?? '?'}–${m.away_score ?? '?'} ${m.away_team.fifa_code}`
+                : null
+              return (
+                <div key={i} className="flex items-start justify-between py-2 border-b border-border/40 last:border-0 gap-2">
+                  <div className="flex-1 min-w-0">
+                    {matchLabel && (
+                      <p className="text-[10px] text-muted-foreground font-mono mb-0.5">{matchLabel}</p>
+                    )}
+                    <p className="text-sm text-muted-foreground">{s.reason}</p>
+                  </div>
+                  <Badge variant={s.points > 0 ? 'success' : 'outline'} className="shrink-0">+{s.points}</Badge>
+                </div>
+              )
+            })}
           </CardContent>
         </Card>
       )}

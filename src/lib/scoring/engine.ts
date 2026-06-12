@@ -105,14 +105,15 @@ export function scoreMatchPrediction(
   prediction: MatchPrediction,
   scorerPredictions: ScorerPrediction[],
   matchEvents: MatchEvent[],
-  rules: RulesMap
+  rules: RulesMap,
+  opts?: { homeCode?: string; awayCode?: string }
 ): MatchScoreBreakdown {
   const items: ScoreItem[] = []
 
   if (
     match.home_score === null ||
     match.away_score === null ||
-    match.status !== 'finished'
+    (match.status !== 'finished' && match.status !== 'live')
   ) {
     return { user_id: prediction.user_id, match_id: match.id, total_points: 0, items }
   }
@@ -123,12 +124,15 @@ export function scoreMatchPrediction(
   const actualAway = match.away_score
 
   // ── Exact score ──────────────────────────────
+  const homeLabel = opts?.homeCode ?? 'Local'
+  const awayLabel = opts?.awayCode ?? 'Visitante'
+
   if (predHome === actualHome && predAway === actualAway) {
     const pts = getRulePoints(rules, SCORING_KEYS.EXACT_SCORE)
     items.push({
       category: 'exact_score',
       points: pts,
-      reason: `+${pts} marcador exacto: predijiste ${predHome}-${predAway} y terminó ${actualHome}-${actualAway}.`,
+      reason: `+${pts} marcador exacto: ${homeLabel} ${actualHome}-${actualAway} ${awayLabel}`,
     })
 
     // Exact score implies correct winner — add winner points too
@@ -153,16 +157,16 @@ export function scoreMatchPrediction(
 
     if (actualWinner === predWinner) {
       const pts = getRulePoints(rules, SCORING_KEYS.CORRECT_WINNER)
-      const label =
+      const winnerLabel =
         actualWinner === 'draw'
           ? 'empate'
           : actualWinner === 'home'
-          ? `${match.home_team_id}`
-          : `${match.away_team_id}`
+          ? `${homeLabel} gana`
+          : `${awayLabel} gana`
       items.push({
         category: 'correct_winner',
         points: pts,
-        reason: `+${pts} resultado correcto: predijiste ${label} y acertaste.`,
+        reason: `+${pts} resultado correcto: ${winnerLabel} (${actualHome}-${actualAway})`,
       })
     } else {
       items.push({

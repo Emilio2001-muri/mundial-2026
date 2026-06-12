@@ -41,6 +41,7 @@ export default async function GlobalPredictionsPage() {
       locked={locked}
       isAdmin={isAdmin}
       lockAt={tournament?.global_predictions_lock_at ?? null}
+      adminUnlocked={existing?.admin_unlocked ?? false}
     />
   )
 }

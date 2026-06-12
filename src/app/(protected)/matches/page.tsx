@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { MatchesClient } from './MatchesClient'
 
-export const revalidate = 30
+export const dynamic = 'force-dynamic'
 
 export default async function MatchesPage() {
   const supabase = await createClient()
@@ -20,7 +20,7 @@ export default async function MatchesPage() {
     user
       ? supabase
           .from('match_predictions')
-          .select('*, scorer_predictions(*)')
+          .select('*, scorer_predictions(*, player:players(id, name))')
           .eq('user_id', user.id)
       : Promise.resolve({ data: [] }),
   ])

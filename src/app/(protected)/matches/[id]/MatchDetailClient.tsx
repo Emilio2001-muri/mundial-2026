@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { phaseLabel } from '@/lib/utils'
 import { isMatchLocked } from '@/lib/scoring'
@@ -10,6 +11,26 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import type { MatchWithTeams, MatchPrediction, ScorerPrediction, Player, Lineup, MatchEvent } from '@/types'
 import { MapPin } from 'lucide-react'
+
+/** Approximate live minute from kickoff time */
+function useLiveMinute(kickoffAt: string) {
+  const [minute, setMinute] = useState('')
+  useEffect(() => {
+    function calc() {
+      const elapsed = (Date.now() - new Date(kickoffAt).getTime()) / 60_000
+      if (elapsed <= 0) return setMinute("0'")
+      if (elapsed <= 45) return setMinute(`${Math.floor(elapsed)}'`)
+      if (elapsed <= 60) return setMinute('MT')
+      const sh = elapsed - 15
+      if (sh <= 90) return setMinute(`${Math.floor(sh)}'`)
+      setMinute("90'")
+    }
+    calc()
+    const id = setInterval(calc, 30_000)
+    return () => clearInterval(id)
+  }, [kickoffAt])
+  return minute
+}
 
 interface MatchDetailClientProps {
   match: MatchWithTeams
@@ -34,6 +55,7 @@ export function MatchDetailClient({
 }: MatchDetailClientProps) {
   const isFinished = match.status === 'finished'
   const isLive = match.status === 'live'
+  const liveMinute = useLiveMinute(match.kickoff_at)
 
   return (
     <div className="space-y-4">
@@ -55,7 +77,7 @@ export function MatchDetailClient({
               {isLive ? (
                 <span className="flex items-center gap-1 text-xs font-bold text-red-500">
                   <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                  EN VIVO
+                  {liveMinute ? `${liveMinute} · EN VIVO` : 'EN VIVO'}
                 </span>
               ) : (
                 <LockCountdown kickoffAt={match.kickoff_at} />
@@ -109,6 +131,25 @@ export function MatchDetailClient({
                 <span>{match.venue.name} · {match.venue.city}</span>
               </div>
             )}
+
+            {/* User's prediction summary (when locked/live/finished) */}
+            {prediction && (isLive || isFinished || isMatchLocked(match.kickoff_at)) && (
+              <div className="mt-3 pt-3 border-t border-border/30 flex flex-wrap items-center justify-center gap-2 text-xs">
+                <span className="text-muted-foreground">Tu predicción:</span>
+                <span className="font-bold text-primary">
+                  {prediction.predicted_home_score ?? '?'} – {prediction.predicted_away_score ?? '?'}
+                </span>
+                {(prediction.scorer_predictions as Array<typeof prediction.scorer_predictions[0] & { player?: { name: string } | null }>)
+                  .slice(0, 2)
+                  .filter((sp) => sp.player?.name)
+                  .map((sp) => (
+                    <span key={sp.id} className="text-amber-500 font-semibold">
+                      ⚽ {sp.player!.name}
+                    </span>
+                  ))
+                }
+              </div>
+            )}
           </CardContent>
         </Card>
       </motion.div>
@@ -120,15 +161,22 @@ export function MatchDetailClient({
             <CardContent className="py-4">
               <h3 className="font-bold text-sm mb-3">Eventos del partido</h3>
               <div className="space-y-2">
-                {events.filter((e) => ['goal', 'own_goal', 'penalty'].includes(e.event_type)).map((e) => (
-                  <div key={e.id} className="flex items-center gap-3 text-sm">
-                    <span className="text-xs text-muted-foreground w-8 text-right font-mono">{e.minute}&apos;</span>
-                    <span>{e.event_type === 'own_goal' ? '⚽ (AG)' : e.event_type === 'penalty' ? '⚽ (P)' : '⚽'}</span>
-                    <span className="font-medium flex-1 truncate">Gol registrado</span>
-                    {e.is_penalty && <Badge variant="warning" className="text-[9px]">Penal</Badge>}
-                    {e.is_own_goal && <Badge variant="destructive" className="text-[9px]">A.G.</Badge>}
-                  </div>
-                ))}
+                {events.filter((e) => ['goal', 'own_goal', 'penalty'].includes(e.event_type)).map((e) => {
+                  const ev = e as typeof e & { player?: { name: string } | null; team?: { fifa_code: string } | null }
+                  const icon = ev.event_type === 'own_goal' ? '⚽ (AG)' : ev.event_type === 'penalty' ? '⚽ (P)' : '⚽'
+                  const playerName = ev.player?.name ?? 'Desconocido'
+                  const teamCode = ev.team?.fifa_code ?? ''
+                  return (
+                    <div key={e.id} className="flex items-center gap-3 text-sm">
+                      <span className="text-xs text-muted-foreground w-8 text-right font-mono">{e.minute}&apos;</span>
+                      <span>{icon}</span>
+                      <span className="font-medium flex-1 truncate">{playerName}</span>
+                      {teamCode && <span className="text-[10px] text-muted-foreground font-mono">{teamCode}</span>}
+                      {e.is_penalty && <Badge variant="warning" className="text-[9px]">Penal</Badge>}
+                      {e.is_own_goal && <Badge variant="destructive" className="text-[9px]">A.G.</Badge>}
+                    </div>
+                  )
+                })}
               </div>
             </CardContent>
           </Card>

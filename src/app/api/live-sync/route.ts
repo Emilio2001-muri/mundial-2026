@@ -2,10 +2,12 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { fetchLiveFixtures } from '@/lib/football-data'
 import { advanceBracket } from '@/lib/bracket-advance'
+import { doScoreMatch } from '@/lib/scoring/compute'
 
-// Public endpoint called by client-side polling
-// Rate-limited by Next.js cache: max 1 real API call per 30s
-export const revalidate = 30
+// Public endpoint called by client-side polling.
+// No caching — always fetches fresh from football-data.org.
+// The football-data.org fetch itself is cached 30s to respect rate limits.
+export const dynamic = 'force-dynamic'
 
 const TOURNAMENT_ID = 'a1b2c3d4-0000-0000-0000-000000000001'
 
@@ -23,6 +25,7 @@ export async function GET() {
 
   let updated = 0
   let hasLive = false
+  const matchesToScore: string[] = []
 
   for (const f of fixtures) {
     if (f.status === 'live') hasLive = true
@@ -33,13 +36,19 @@ export async function GET() {
 
     const { data: match } = await admin
       .from('matches')
-      .select('id')
+      .select('id, status, home_score, away_score')
       .eq('tournament_id', TOURNAMENT_ID)
       .eq('home_team_id', homeId)
       .eq('away_team_id', awayId)
       .maybeSingle()
 
     if (!match) continue
+
+    // Detect if score or status actually changed
+    const scoreChanged =
+      match.home_score !== f.home_score || match.away_score !== f.away_score
+    const becameFinished = f.status === 'finished' && match.status !== 'finished'
+    const isLiveWithGoal = f.status === 'live' && scoreChanged
 
     await admin.from('matches').update({
       kickoff_at: f.kickoff_utc,
@@ -53,15 +62,30 @@ export async function GET() {
     }).eq('id', match.id)
 
     updated++
+
+    // Queue scoring for matches that finished or had a goal in live play
+    if (becameFinished || isLiveWithGoal) {
+      matchesToScore.push(match.id)
+    }
   }
 
-  // After updating scores, advance bracket (promote winners/classified teams)
+  // Advance bracket after score updates
   if (updated > 0) {
     await advanceBracket(admin)
   }
 
+  // Trigger scoring for changed matches (non-blocking best-effort)
+  for (const matchId of matchesToScore) {
+    try {
+      await doScoreMatch(matchId, admin)
+    } catch (e) {
+      console.error('[live-sync] scoring error', matchId, e)
+    }
+  }
+
   return NextResponse.json({
     updated,
+    scored: matchesToScore.length,
     total: fixtures.length,
     live: hasLive,
     ts: new Date().toISOString(),

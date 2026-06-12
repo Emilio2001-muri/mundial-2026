@@ -1,0 +1,172 @@
+/**
+ * Internal scoring computation — no auth checks.
+ * Used by route handlers and server actions alike.
+ */
+import { createAdminClient } from '@/lib/supabase/admin'
+import { scoreMatchPrediction, buildRulesMap } from './engine'
+import type { Match, MatchPrediction, ScorerPrediction, MatchEvent, ScoringRule } from '@/types'
+
+type AdminClient = ReturnType<typeof createAdminClient>
+
+/**
+ * Score all predictions for a match and upsert prediction_scores.
+ * Works for both 'live' (provisional) and 'finished' (final) status.
+ * Recalculates the leaderboard snapshot after scoring.
+ */
+export async function doScoreMatch(matchId: string, admin: AdminClient): Promise<void> {
+  // Fetch match with team codes for readable reason text
+  const { data: match } = await admin
+    .from('matches')
+    .select(`
+      *,
+      home_team:teams!matches_home_team_id_fkey(fifa_code, name),
+      away_team:teams!matches_away_team_id_fkey(fifa_code, name)
+    `)
+    .eq('id', matchId)
+    .maybeSingle()
+
+  if (!match || match.home_score === null || match.away_score === null) return
+
+  const { data: rulesRows } = await admin.from('scoring_rules').select('*') as { data: ScoringRule[] | null }
+  const rules = buildRulesMap(rulesRows ?? [])
+
+  const { data: predictions } = await admin
+    .from('match_predictions')
+    .select('*, scorer_predictions(*)')
+    .eq('match_id', matchId) as { data: (MatchPrediction & { scorer_predictions: ScorerPrediction[] })[] | null }
+
+  const { data: events } = await admin
+    .from('match_events')
+    .select('*')
+    .eq('match_id', matchId) as { data: MatchEvent[] | null }
+
+  if (!predictions?.length) return
+
+  // Delete and re-insert scores for this match
+  await admin.from('prediction_scores').delete().eq('match_id', matchId)
+
+  const inserts: object[] = []
+  for (const pred of predictions) {
+    const breakdown = scoreMatchPrediction(
+      match as unknown as Match,
+      pred,
+      pred.scorer_predictions ?? [],
+      events ?? [],
+      rules,
+      {
+        homeCode: (match as unknown as { home_team?: { fifa_code?: string } }).home_team?.fifa_code,
+        awayCode: (match as unknown as { away_team?: { fifa_code?: string } }).away_team?.fifa_code,
+      }
+    )
+
+    for (const item of breakdown.items) {
+      if (item.points > 0) {
+        inserts.push({
+          user_id: pred.user_id,
+          match_id: matchId,
+          prediction_id: pred.id,
+          category: item.category,
+          points: item.points,
+          reason: item.reason,
+          created_at: new Date().toISOString(),
+        })
+      }
+    }
+
+    // Mark as scored only when the match is definitively finished
+    if (match.status === 'finished') {
+      await admin.from('match_predictions').update({ status: 'scored' }).eq('id', pred.id)
+    }
+  }
+
+  if (inserts.length > 0) {
+    await admin.from('prediction_scores').insert(inserts)
+  }
+
+  // Recalculate leaderboard snapshot
+  if (match.tournament_id) {
+    await doRecalculateLeaderboard(match.tournament_id, admin)
+  }
+}
+
+/**
+ * Rebuild leaderboard snapshots for a tournament.
+ * No auth required — uses admin client.
+ */
+export async function doRecalculateLeaderboard(tournamentId: string, admin: AdminClient): Promise<void> {
+  const { data: profiles } = await admin.from('profiles').select('id, display_name, avatar_url')
+  if (!profiles?.length) return
+
+  const { data: scoreData } = await admin
+    .from('prediction_scores')
+    .select('user_id, category, points')
+
+  const { data: predStats } = await admin
+    .from('match_predictions')
+    .select('user_id, status')
+
+  interface ScoreRow { user_id: string; category: string; points: number }
+  interface PredRow  { user_id: string; status: string }
+
+  const scores = (scoreData ?? []) as ScoreRow[]
+  const preds  = (predStats ?? []) as PredRow[]
+
+  const snapshots = profiles.map((profile) => {
+    const myScores = scores.filter((s) => s.user_id === profile.id)
+    const totalPoints = myScores.reduce((sum, s) => sum + s.points, 0)
+    const exactScoresCount = myScores.filter((s) => s.category === 'exact_score').length
+    const winnersCount     = myScores.filter((s) => s.category === 'correct_winner').length
+    const scorerPoints     = myScores.filter((s) => s.category === 'scorer_goal').reduce((sum, s) => sum + s.points, 0)
+    const globalPoints     = myScores.filter((s) =>
+      ['global_champion','global_runner_up','global_third','global_finalist',
+       'golden_ball','silver_ball','bronze_ball','golden_boot','golden_glove','best_young']
+        .includes(s.category)
+    ).reduce((sum, s) => sum + s.points, 0)
+
+    const myPreds  = preds.filter((p) => p.user_id === profile.id)
+    const scored   = myPreds.filter((p) => p.status === 'scored').length
+    const successRate = scored > 0 ? Math.round(((exactScoresCount + winnersCount) / scored) * 100) : 0
+
+    return {
+      user_id: profile.id,
+      total_points: totalPoints,
+      exact_scores_count: exactScoresCount,
+      winners_count: winnersCount,
+      scorer_points: scorerPoints,
+      global_points: globalPoints,
+      success_rate: successRate,
+    }
+  })
+
+  const sorted = [...snapshots].sort((a, b) => b.total_points - a.total_points)
+  const ranked = sorted.map((s, i) => ({ ...s, rank: i + 1 }))
+
+  // Get previous ranks for trend calculation
+  const { data: prevSnapshots } = await admin
+    .from('leaderboard_snapshots')
+    .select('user_id, rank')
+    .eq('tournament_id', tournamentId)
+    .order('created_at', { ascending: false })
+    .limit(profiles.length)
+
+  const prevRankMap: Record<string, number> = {}
+  for (const prev of prevSnapshots ?? []) {
+    if (!prevRankMap[prev.user_id]) prevRankMap[prev.user_id] = prev.rank
+  }
+
+  const inserts = ranked.map((s) => ({
+    tournament_id: tournamentId,
+    user_id: s.user_id,
+    total_points: s.total_points,
+    rank: s.rank,
+    previous_rank: prevRankMap[s.user_id] ?? null,
+    exact_scores_count: s.exact_scores_count,
+    winners_count: s.winners_count,
+    scorer_points: s.scorer_points,
+    global_points: s.global_points,
+    success_rate: s.success_rate,
+    created_at: new Date().toISOString(),
+  }))
+
+  await admin.from('leaderboard_snapshots').insert(inserts)
+}

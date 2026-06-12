@@ -196,6 +196,7 @@ export interface GlobalPrediction {
   submitted_at: string | null
   updated_at: string
   locked_at: string | null
+  admin_unlocked: boolean
 }
 
 export interface ScoringRule {

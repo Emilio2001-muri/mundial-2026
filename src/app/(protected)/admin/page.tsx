@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import { cleanupOldData } from '@/app/actions/admin'
+import { CleanupButton } from './CleanupButton'
 
 export const revalidate = 0
 
@@ -28,6 +30,16 @@ export default async function AdminPage() {
             <p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p>
           </Link>
         ))}
+      </div>
+
+      {/* Storage cleanup */}
+      <div className="rounded-2xl border border-border bg-card p-4 space-y-2">
+        <p className="font-bold text-sm">🗑 Limpieza de almacenamiento</p>
+        <p className="text-xs text-muted-foreground">
+          Elimina snapshots de leaderboard antiguos y filas de 0 puntos.
+          Las predicciones de usuarios nunca se borran.
+        </p>
+        <CleanupButton action={cleanupOldData} />
       </div>
     </div>
   )

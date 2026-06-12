@@ -158,14 +158,37 @@ export function DashboardClient({
         <motion.div variants={itemVariants}>
           <h2 className="font-bold text-sm mb-2">Puntos recientes</h2>
           <div className="space-y-1.5">
-            {(recentScores as Array<{ points: number; reason: string; created_at: string }>).map((score, i) => (
-              <div key={i} className="flex items-start justify-between py-2 border-b border-border/40 last:border-0">
-                <p className="text-sm text-muted-foreground flex-1 pr-2">{score.reason}</p>
-                <Badge variant={score.points > 0 ? 'success' : 'secondary'}>
-                  +{score.points}
-                </Badge>
-              </div>
-            ))}
+            {(recentScores as Array<{
+              points: number
+              reason: string
+              created_at: string
+              match: {
+                id: string
+                home_score: number | null
+                away_score: number | null
+                status: string
+                home_team: { fifa_code: string } | null
+                away_team: { fifa_code: string } | null
+              } | null
+            }>).map((score, i) => {
+              const m = score.match
+              const matchLabel = m?.home_team && m?.away_team
+                ? `${m.home_team.fifa_code} ${m.home_score ?? '?'}–${m.away_score ?? '?'} ${m.away_team.fifa_code}`
+                : null
+              return (
+                <div key={i} className="flex items-start justify-between py-2 border-b border-border/40 last:border-0 gap-2">
+                  <div className="flex-1 min-w-0">
+                    {matchLabel && (
+                      <p className="text-[10px] text-muted-foreground font-mono mb-0.5">{matchLabel}</p>
+                    )}
+                    <p className="text-sm text-muted-foreground">{score.reason}</p>
+                  </div>
+                  <Badge variant={score.points > 0 ? 'success' : 'secondary'} className="shrink-0">
+                    +{score.points}
+                  </Badge>
+                </div>
+              )
+            })}
           </div>
         </motion.div>
       )}

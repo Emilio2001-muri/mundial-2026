@@ -24,10 +24,18 @@ export async function saveGlobalPredictions(
   const tournamentId = tournament.id
 
   if (tournament && new Date() >= new Date(tournament.global_predictions_lock_at)) {
-    // Check admin override
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
     if (profile?.role !== 'admin') {
-      return { error: 'Las predicciones globales están bloqueadas.' }
+      // Allow if admin explicitly unlocked this prediction
+      const { data: existingPred } = await supabase
+        .from('global_predictions')
+        .select('admin_unlocked')
+        .eq('user_id', user.id)
+        .eq('tournament_id', tournamentId)
+        .maybeSingle()
+      if (!existingPred?.admin_unlocked) {
+        return { error: 'Las predicciones globales están bloqueadas.' }
+      }
     }
   }
 
@@ -40,6 +48,7 @@ export async function saveGlobalPredictions(
         ...parsed.data,
         submitted_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
+        admin_unlocked: false, // consume the one-time unlock after saving
       },
       { onConflict: 'tournament_id,user_id', ignoreDuplicates: false }
     )

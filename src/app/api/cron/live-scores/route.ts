@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { recalculateMatchScores } from '@/app/actions/scoring'
+import { doScoreMatch } from '@/lib/scoring/compute'
 
 function validateCronSecret(request: NextRequest): boolean {
   const authHeader = request.headers.get('authorization')
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
   try {
     const admin = createAdminClient()
 
-    // Find matches that just finished (status=live but should be finished based on kickoff + 110min)
+    // Score any match that finished (status=live but 110+ min old) as fallback
     const cutoff = new Date(Date.now() - 110 * 60_000).toISOString()
     const { data: liveMatches } = await admin
       .from('matches')
@@ -26,12 +26,13 @@ export async function GET(request: NextRequest) {
 
     if (liveMatches?.length) {
       for (const m of liveMatches) {
-        await recalculateMatchScores(m.id)
+        await admin.from('matches').update({ status: 'finished' }).eq('id', m.id)
+        await doScoreMatch(m.id, admin)
       }
     }
 
     // Lock predictions for matches about to kick off
-    const lockWindow = new Date(Date.now() + 60_000).toISOString() // next 60s
+    const lockWindow = new Date(Date.now() + 60_000).toISOString()
     const now = new Date().toISOString()
 
     const { data: soonMatches } = await admin
@@ -48,7 +49,7 @@ export async function GET(request: NextRequest) {
         .in('match_id', soonIds)
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, scored: liveMatches?.length ?? 0, locked: soonIds.length })
   } catch (err) {
     console.error('[cron/live-scores]', err)
     return NextResponse.json({ error: 'Failed' }, { status: 500 })
