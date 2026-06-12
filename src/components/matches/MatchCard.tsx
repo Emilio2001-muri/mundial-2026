@@ -28,25 +28,24 @@ function KickoffLabel({ utcIso }: { utcIso: string }) {
   )
 }
 
-/** Approximate match minute derived from kickoff time */
+/** Approximate live minute from kickoff time.
+ * Model: first half ~47 min (45 + ~2 stoppage), halftime break ~15 min.
+ * Break ends at ~62 min elapsed, then second half continues.
+ */
 function useLiveMinute(kickoffAt: string) {
   const [minute, setMinute] = useState<string>('')
 
   useEffect(() => {
     function calc() {
       const elapsed = (Date.now() - new Date(kickoffAt).getTime()) / 60_000
-      if (elapsed <= 0) return setMinute('0\'')
-      // First half: 0–45 min elapsed
-      if (elapsed <= 45) return setMinute(`${Math.floor(elapsed)}'`)
-      // Halftime break: 45–60 min elapsed
-      if (elapsed <= 60) return setMinute('MT')
-      // Second half: subtract 15min break
-      const sh = elapsed - 15
-      if (sh <= 90) return setMinute(`${Math.floor(sh)}'`)
-      // Extra time
-      if (elapsed <= 120) return setMinute(`${Math.floor(sh)}'`)
-      // Should be over
-      setMinute('90\'')
+      if (elapsed <= 0) return setMinute("0'")
+      // First half (including stoppage): show up to 47'
+      if (elapsed <= 47) return setMinute(`${Math.floor(elapsed)}'`)
+      // Halftime break: 47–62 min elapsed
+      if (elapsed <= 62) return setMinute('MT')
+      // Second half: 45 + time since end of break
+      const sh = Math.floor(45 + (elapsed - 62))
+      setMinute(`${Math.min(sh, 120)}'`)
     }
     calc()
     const id = setInterval(calc, 30_000)
@@ -111,13 +110,6 @@ export function MatchCard({ match }: MatchCardProps) {
           {!pred && !locked && !played && (
             <div className="mt-1 text-[10px] text-muted-foreground bg-muted rounded px-1.5 py-0.5 inline-block">
               Predecir
-            </div>
-          )}
-
-          {/* Scorer prediction */}
-          {scorerPred?.player?.name && (
-            <div className="mt-0.5 text-[9px] text-amber-500 bg-amber-500/10 rounded px-1.5 py-0.5 inline-block truncate max-w-[80px]">
-              ⚽ {scorerPred.player.name.split(' ').pop()}
             </div>
           )}
         </div>

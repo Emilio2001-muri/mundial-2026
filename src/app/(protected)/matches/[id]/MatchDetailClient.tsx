@@ -12,18 +12,20 @@ import { Badge } from '@/components/ui/badge'
 import type { MatchWithTeams, MatchPrediction, ScorerPrediction, Player, Lineup, MatchEvent } from '@/types'
 import { MapPin } from 'lucide-react'
 
-/** Approximate live minute from kickoff time */
+/** Approximate live minute from kickoff time.
+ * Model: first half ~47 min (45 + ~2 stoppage), halftime break ~15 min.
+ * Break ends at ~62 min elapsed, then second half continues.
+ */
 function useLiveMinute(kickoffAt: string) {
   const [minute, setMinute] = useState('')
   useEffect(() => {
     function calc() {
       const elapsed = (Date.now() - new Date(kickoffAt).getTime()) / 60_000
       if (elapsed <= 0) return setMinute("0'")
-      if (elapsed <= 45) return setMinute(`${Math.floor(elapsed)}'`)
-      if (elapsed <= 60) return setMinute('MT')
-      const sh = elapsed - 15
-      if (sh <= 90) return setMinute(`${Math.floor(sh)}'`)
-      setMinute("90'")
+      if (elapsed <= 47) return setMinute(`${Math.floor(elapsed)}'`)
+      if (elapsed <= 62) return setMinute('MT')
+      const sh = Math.floor(45 + (elapsed - 62))
+      setMinute(`${Math.min(sh, 120)}'`)
     }
     calc()
     const id = setInterval(calc, 30_000)
