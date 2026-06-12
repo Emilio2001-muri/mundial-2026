@@ -68,6 +68,54 @@ function mapStatus(s: string): 'scheduled' | 'live' | 'finished' | 'postponed' {
   return 'scheduled'
 }
 
+export interface GoalEvent {
+  minute: number
+  injuryTime: number | null
+  type: 'REGULAR' | 'PENALTY' | 'OWN'
+  teamCode: string   // TLA of the team that scored
+  scorerName: string // Full name from API
+}
+
+/**
+ * Fetch goal events for a single match by its external_id (football-data.org match ID).
+ * Uses no Next.js cache so we always get fresh data during live matches.
+ */
+export async function fetchMatchGoals(externalId: string): Promise<{ goals: GoalEvent[]; error?: string }> {
+  const apiKey = process.env.FOOTBALL_DATA_API_KEY
+  if (!apiKey) return { goals: [], error: 'No API key' }
+
+  try {
+    const res = await fetch(`${API_BASE}/matches/${externalId}`, {
+      headers: { 'X-Auth-Token': apiKey },
+      cache: 'no-store',
+    })
+    if (!res.ok) return { goals: [] }
+
+    interface FDGoal {
+      minute: number
+      injuryTime?: number | null
+      type: string
+      team: { tla?: string; name?: string }
+      scorer: { name?: string } | null
+    }
+    interface FDMatchDetail {
+      goals?: FDGoal[]
+    }
+
+    const data = await res.json() as FDMatchDetail
+    const goals: GoalEvent[] = (data.goals ?? []).map((g) => ({
+      minute: g.minute ?? 0,
+      injuryTime: g.injuryTime ?? null,
+      type: (g.type === 'PENALTY' ? 'PENALTY' : g.type === 'OWN' ? 'OWN' : 'REGULAR') as GoalEvent['type'],
+      teamCode: (g.team?.tla ?? '').toUpperCase(),
+      scorerName: g.scorer?.name ?? '',
+    }))
+    return { goals }
+  } catch (err) {
+    return { goals: [], error: String(err) }
+  }
+}
+
 export async function fetchLiveFixtures(): Promise<{ fixtures: FixtureUpdate[]; error?: string }> {
   const apiKey = process.env.FOOTBALL_DATA_API_KEY
   if (!apiKey) {

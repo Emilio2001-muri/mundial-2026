@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
       const { error: updateErr } = await admin
         .from('matches')
         .update({
+          external_id: f.external_id,
           home_score: f.home_score,
           away_score: f.away_score,
           home_score_et: f.home_score_et,
