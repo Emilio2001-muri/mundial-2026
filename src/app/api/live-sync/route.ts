@@ -160,7 +160,11 @@ export async function GET() {
 /**
  * Fetch goal events from football-data.org match detail and upsert into match_events.
  * Matches player names to our players table by normalized name.
- * Fully replaces auto-generated events on every call (idempotent).
+ *
+ * Strategy to avoid overwriting admin-entered events:
+ *  - API events are tagged with metadata.source = 'api'
+ *  - Only events with source='api' OR player_id=null are replaced on each poll
+ *  - Admin-entered events (no source='api', have player_id) are never touched
  */
 async function syncGoalEvents(
   admin: ReturnType<typeof createAdminClient>,
@@ -169,7 +173,8 @@ async function syncGoalEvents(
   homeTeamId: string,
   awayTeamId: string
 ) {
-  const { goals } = await fetchMatchGoals(externalId)
+  const { goals, error: apiError } = await fetchMatchGoals(externalId)
+  console.log(`[syncGoalEvents] match=${matchId} ext=${externalId} goals=${goals.length} apiError=${apiError ?? 'none'}`)
   if (!goals.length) return
 
   // Load players for both teams
@@ -203,7 +208,6 @@ async function syncGoalEvents(
     if (hit) return hit.id
 
     // Handle abbreviated first name: "b gutierrez" → initial 'b', last name 'gutierrez'
-    // Matches players where last name equals and first name starts with that initial
     if (parts.length >= 2 && parts[0].length === 1) {
       const initial = parts[0]
       const lastName = parts[parts.length - 1]
@@ -238,29 +242,25 @@ async function syncGoalEvents(
     return hit?.id ?? null
   }
 
-  // Delete all auto-generated events for this match (player_id = null means auto-created)
+  // Delete only API-auto-generated events (tagged source='api') and unmatched nulls.
+  // Admin-manually-entered events (no source tag) are NEVER deleted here.
   await admin.from('match_events')
     .delete()
     .eq('match_id', matchId)
     .is('player_id', null)
     .in('event_type', ['goal', 'penalty', 'own_goal'])
 
-  // Also wipe admin-entered events so we don't double-count when the admin
-  // entered data manually before the API had player info.
-  // ONLY wipe if we have real player data from the API (goals.some(g => g.scorerName))
-  const hasPlayerData = goals.some((g) => g.scorerName.length > 0)
-  if (hasPlayerData) {
-    await admin.from('match_events')
-      .delete()
-      .eq('match_id', matchId)
-      .in('event_type', ['goal', 'penalty', 'own_goal'])
-  }
+  // Delete previous API-sourced events (those tagged metadata.source='api')
+  await admin.from('match_events')
+    .delete()
+    .eq('match_id', matchId)
+    .in('event_type', ['goal', 'penalty', 'own_goal'])
+    .filter('metadata->>source', 'eq', 'api')
 
   const inserts = goals.map((g) => {
     // Determine which team scored. For OWN goals the team credited is the OPPONENT.
     let scoringTeamId = tmap[g.teamCode] ?? homeTeamId
     if (g.type === 'OWN') {
-      // Own goal: credited to the team that benefited (opponent of the ball-toucher)
       scoringTeamId = scoringTeamId === homeTeamId ? awayTeamId : homeTeamId
     }
     const playerId = findPlayer(g.scorerName, tmap[g.teamCode] ?? homeTeamId)
@@ -272,12 +272,13 @@ async function syncGoalEvents(
       minute: g.minute + (g.injuryTime ?? 0),
       is_penalty: g.type === 'PENALTY',
       is_own_goal: g.type === 'OWN',
-      // Always store raw scorer name so we can display it even when player_id is null
-      metadata: g.scorerName ? { scorer_name: g.scorerName } : null,
+      // Tag as API-sourced so we can distinguish from admin-entered events
+      metadata: { source: 'api', scorer_name: g.scorerName || '' },
     }
   })
 
   if (inserts.length > 0) {
-    await admin.from('match_events').insert(inserts)
+    const { error: insertError } = await admin.from('match_events').insert(inserts)
+    console.log(`[syncGoalEvents] inserted ${inserts.length} events for match=${matchId}, error=${insertError?.message ?? 'none'}`)
   }
 }

@@ -3,8 +3,8 @@
 import { useState, useTransition } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { addMatchEvent, deleteMatchEvent } from '@/app/actions/admin'
-import { Plus, Trash2, Goal } from 'lucide-react'
+import { addMatchEvent, deleteMatchEvent, syncMatchEvents } from '@/app/actions/admin'
+import { Plus, Trash2, Goal, RefreshCw } from 'lucide-react'
 
 interface Player { id: string; name: string; position: string | null; team_id: string }
 interface Team { id: string; name: string; fifa_code: string }
@@ -32,9 +32,29 @@ export function MatchEventsClient({ match, events: initialEvents, players }: Mat
   const [eventType, setEventType] = useState('goal')
   const [isOwnGoal, setIsOwnGoal] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const [isSyncing, startSyncTransition] = useTransition()
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null)
+  const [syncDebug, setSyncDebug] = useState<string | null>(null)
 
   const teamPlayers = players.filter(p => p.team_id === teamId)
+
+  const handleSync = () => {
+    setSyncDebug(null)
+    startSyncTransition(async () => {
+      const res = await syncMatchEvents(match.id)
+      if (res.error && !res.goalsFromApi) {
+        setMessage({ text: res.error, ok: false })
+      } else if (res.apiGoals === 0) {
+        setMessage({ text: `API OK pero sin goles devueltos (external_id: ${res.externalId ?? 'null'})`, ok: false })
+      } else {
+        setMessage({ text: `✓ Sincronizados ${res.inserted} goles desde la API. external_id: ${res.externalId}`, ok: true })
+        if (res.goalsFromApi?.length) {
+          setSyncDebug(res.goalsFromApi.map(g => `${g.minute}' ${g.team} — ${g.scorer} [${g.type}]`).join('\n'))
+        }
+        window.location.reload()
+      }
+    })
+  }
 
   const handleAdd = () => {
     startTransition(async () => {
@@ -85,6 +105,24 @@ export function MatchEventsClient({ match, events: initialEvents, players }: Mat
           {message.text}
         </div>
       )}
+
+      {/* Auto-sync from API */}
+      <Card className="border-primary/20">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <RefreshCw className="w-4 h-4 text-primary" /> Sincronizar goles desde API
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <p className="text-xs text-muted-foreground">Obtiene los goles de football-data.org y los guarda automáticamente. No borra eventos manuales.</p>
+          <Button onClick={handleSync} loading={isSyncing} variant="outline" className="w-full">
+            <RefreshCw className="w-4 h-4" /> Sincronizar goles (API)
+          </Button>
+          {syncDebug && (
+            <pre className="text-[10px] text-muted-foreground bg-muted rounded p-2 whitespace-pre-wrap">{syncDebug}</pre>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Add event form */}
       <Card>

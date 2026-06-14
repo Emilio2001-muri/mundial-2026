@@ -392,6 +392,95 @@ export async function createUserAccount(
   return {}
 }
 
+// ── Force-sync goal events for a specific match ──────────────────
+// Calls football-data.org to fetch goal events and saves them.
+// Returns debug info about what the API returned.
+export async function syncMatchEvents(matchId: string): Promise<{
+  error?: string
+  apiGoals?: number
+  inserted?: number
+  externalId?: string | null
+  goalsFromApi?: Array<{ minute: number; scorer: string; team: string; type: string }>
+}> {
+  await requireAdmin()
+  const admin = createAdminClient()
+
+  const { data: match } = await admin
+    .from('matches')
+    .select('id, external_id, home_team_id, away_team_id, home_score, away_score')
+    .eq('id', matchId)
+    .maybeSingle()
+
+  if (!match) return { error: 'Partido no encontrado' }
+  if (!match.external_id) return { error: 'Este partido no tiene external_id (no ha sido vinculado con la API)', externalId: null }
+  if (!match.home_team_id || !match.away_team_id) return { error: 'Faltan team IDs en el partido' }
+
+  const { fetchMatchGoals } = await import('@/lib/football-data')
+  const { goals, error: apiError } = await fetchMatchGoals(match.external_id)
+
+  if (apiError) return { error: `Error de API: ${apiError}`, externalId: match.external_id }
+  if (!goals.length) return {
+    apiGoals: 0,
+    externalId: match.external_id,
+    goalsFromApi: [],
+    error: 'La API no devolvió goles para este partido (puede ser partido sin goles, o la API aún no tiene los datos)',
+  }
+
+  // Load players for both teams
+  const { data: players } = await admin.from('players').select('id, name, team_id').in('team_id', [match.home_team_id, match.away_team_id])
+  const { data: allTeams } = await admin.from('teams').select('id, fifa_code')
+  const tmap: Record<string, string> = {}
+  for (const t of allTeams ?? []) tmap[t.fifa_code] = t.id
+
+  function norm(s: string) {
+    return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, '').trim()
+  }
+  function findPlayer(name: string, teamId: string): string | null {
+    if (!name) return null
+    const n = norm(name)
+    const parts = n.split(' ').filter(Boolean)
+    let hit = (players ?? []).find((p) => p.team_id === teamId && norm(p.name) === n)
+    if (hit) return hit.id
+    if (parts.length >= 2 && parts[0].length === 1) {
+      const initial = parts[0]; const lastName = parts[parts.length - 1]
+      hit = (players ?? []).find((p) => { const pp = norm(p.name).split(' ').filter(Boolean); return p.team_id === teamId && pp[pp.length-1] === lastName && pp[0].startsWith(initial) })
+      if (hit) return hit.id
+    }
+    const lastName = parts[parts.length - 1]
+    if (lastName.length > 2) { hit = (players ?? []).find((p) => p.team_id === teamId && norm(p.name).endsWith(lastName)); if (hit) return hit.id }
+    hit = (players ?? []).find((p) => { const pn = norm(p.name); return p.team_id === teamId && parts.some((part) => part.length > 3 && pn.includes(part)) })
+    return hit?.id ?? null
+  }
+
+  // Delete previous API-sourced and null-player events
+  await admin.from('match_events').delete().eq('match_id', matchId).is('player_id', null).in('event_type', ['goal', 'penalty', 'own_goal'])
+  await admin.from('match_events').delete().eq('match_id', matchId).in('event_type', ['goal', 'penalty', 'own_goal']).filter('metadata->>source', 'eq', 'api')
+
+  const inserts = goals.map((g) => {
+    let scoringTeamId = tmap[g.teamCode] ?? match.home_team_id!
+    if (g.type === 'OWN') scoringTeamId = scoringTeamId === match.home_team_id ? match.away_team_id! : match.home_team_id!
+    const playerId = findPlayer(g.scorerName, tmap[g.teamCode] ?? match.home_team_id!)
+    return { match_id: matchId, team_id: scoringTeamId, player_id: playerId, event_type: g.type === 'PENALTY' ? 'penalty' : g.type === 'OWN' ? 'own_goal' : 'goal', minute: g.minute + (g.injuryTime ?? 0), is_penalty: g.type === 'PENALTY', is_own_goal: g.type === 'OWN', metadata: { source: 'api', scorer_name: g.scorerName || '' } }
+  })
+
+  const { error: insertError } = await admin.from('match_events').insert(inserts)
+  if (insertError) return { error: `Error al insertar: ${insertError.message}`, externalId: match.external_id, apiGoals: goals.length }
+
+  // Re-score the match
+  const { doScoreMatch } = await import('@/lib/scoring/compute')
+  await doScoreMatch(matchId, admin)
+
+  revalidatePath(`/matches/${matchId}`)
+  revalidatePath('/leaderboard')
+
+  return {
+    apiGoals: goals.length,
+    inserted: inserts.length,
+    externalId: match.external_id,
+    goalsFromApi: goals.map((g) => ({ minute: g.minute, scorer: g.scorerName || '(sin nombre)', team: g.teamCode, type: g.type })),
+  }
+}
+
 // ── Re-score ALL finished matches ────────────────────────────────
 // Regenerates prediction_scores with clean reason text.
 // Safe: skips matches without scores, never touches prediction rows.
