@@ -77,16 +77,54 @@ export function msUntilLock(kickoff_at: string, nowOverride?: Date): number {
 }
 
 // ─────────────────────────────────────────────
+// Normalize a name: lowercase, strip diacritics + punctuation
+// ─────────────────────────────────────────────
+function normName(s: string): string {
+  return s.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9 ]/g, '')
+    .trim()
+}
+
+function nameMatchesScorerName(playerName: string, scorerName: string): boolean {
+  const pn = normName(playerName)
+  const sn = normName(scorerName)
+  if (pn === sn) return true
+  const sParts = sn.split(' ').filter(Boolean)
+  const pParts = pn.split(' ').filter(Boolean)
+  // Last name match
+  const sLast = sParts[sParts.length - 1]
+  const pLast = pParts[pParts.length - 1]
+  if (sLast.length > 2 && sLast === pLast) return true
+  // Abbreviated first name: "b gutierrez" vs "brian gutierrez"
+  if (sParts.length >= 2 && sParts[0].length === 1) {
+    const initial = sParts[0]
+    const sLastName = sParts[sParts.length - 1]
+    if (pParts[pParts.length - 1] === sLastName && pParts[0].startsWith(initial)) return true
+  }
+  // Significant word in common
+  return sParts.some((part) => part.length > 4 && pn.includes(part))
+}
+
+// ─────────────────────────────────────────────
 // Aggregate goals scored by a player in a match
 // (excludes own goals, includes penalties by default)
 // ─────────────────────────────────────────────
 export function countPlayerGoals(
   events: MatchEvent[],
   playerId: string,
-  options = { countOwnGoals: false, countPenalties: true }
+  options = { countOwnGoals: false, countPenalties: true },
+  playerName?: string
 ): number {
   return events.filter((e) => {
-    if (e.player_id !== playerId) return false
+    if (e.player_id !== playerId) {
+      // Fallback: event has no player_id but metadata.scorer_name matches
+      if (e.player_id !== null) return false
+      if (!playerName) return false
+      const scorerName = e.metadata?.scorer_name as string | undefined
+      if (!scorerName) return false
+      if (!nameMatchesScorerName(playerName, scorerName)) return false
+    }
     // Own goals: skip unless enabled
     if ((e.event_type === 'own_goal' || e.is_own_goal) && !options.countOwnGoals) return false
     // Only count goal-scoring events
@@ -106,7 +144,7 @@ export function scoreMatchPrediction(
   scorerPredictions: ScorerPrediction[],
   matchEvents: MatchEvent[],
   rules: RulesMap,
-  opts?: { homeCode?: string; awayCode?: string }
+  opts?: { homeCode?: string; awayCode?: string; playerNames?: Record<string, string> }
 ): MatchScoreBreakdown {
   const items: ScoreItem[] = []
 
@@ -179,7 +217,8 @@ export function scoreMatchPrediction(
 
   // ── Scorer predictions ─────────────────────
   for (const sp of scorerPredictions) {
-    const goalsScored = countPlayerGoals(matchEvents, sp.player_id)
+    const playerName = opts?.playerNames?.[sp.player_id]
+    const goalsScored = countPlayerGoals(matchEvents, sp.player_id, undefined, playerName)
     if (goalsScored > 0) {
       const pts = getRulePoints(rules, SCORING_KEYS.SCORER_GOAL) * goalsScored
       items.push({

@@ -32,8 +32,8 @@ export async function doScoreMatch(matchId: string, admin: AdminClient): Promise
 
   const { data: predictions } = await admin
     .from('match_predictions')
-    .select('*, scorer_predictions(*)')
-    .eq('match_id', matchId) as { data: (MatchPrediction & { scorer_predictions: ScorerPrediction[] })[] | null }
+    .select('*, scorer_predictions(*, player:players(id, name))')
+    .eq('match_id', matchId) as { data: (MatchPrediction & { scorer_predictions: (ScorerPrediction & { player?: { id: string; name: string } | null })[] })[] | null }
 
   const { data: events } = await admin
     .from('match_events')
@@ -47,6 +47,13 @@ export async function doScoreMatch(matchId: string, admin: AdminClient): Promise
 
   const inserts: object[] = []
   for (const pred of predictions) {
+    // Build a player-id → name map for scorer fallback matching
+    const playerNames: Record<string, string> = {}
+    for (const sp of pred.scorer_predictions ?? []) {
+      const p = (sp as unknown as { player?: { id: string; name: string } | null }).player
+      if (p?.id && p?.name) playerNames[p.id] = p.name
+    }
+
     const breakdown = scoreMatchPrediction(
       match as unknown as Match,
       pred,
@@ -56,6 +63,7 @@ export async function doScoreMatch(matchId: string, admin: AdminClient): Promise
       {
         homeCode: (match as unknown as { home_team?: { fifa_code?: string } }).home_team?.fifa_code,
         awayCode: (match as unknown as { away_team?: { fifa_code?: string } }).away_team?.fifa_code,
+        playerNames,
       }
     )
 
@@ -153,16 +161,33 @@ export async function doRecalculateLeaderboard(tournamentId: string, admin: Admi
   const sorted = [...snapshots].sort((a, b) => b.total_points - a.total_points)
   const ranked = sorted.map((s, i) => ({ ...s, rank: i + 1 }))
 
-  // Get previous ranks for trend calculation
-  const { data: prevSnapshots } = await admin
+  // Get previous ranks for trend calculation.
+  // Use snapshots from at least 1 hour ago so the arrows reflect a
+  // meaningful position change, not the micro-delta between two consecutive
+  // recalculations of the same session.
+  const oneHourAgo = new Date(Date.now() - 60 * 60_000).toISOString()
+  const { data: prevSnapshotsRaw } = await admin
     .from('leaderboard_snapshots')
-    .select('user_id, rank')
+    .select('user_id, rank, created_at')
     .eq('tournament_id', tournamentId)
+    .lt('created_at', oneHourAgo)
     .order('created_at', { ascending: false })
-    .limit(profiles.length)
+    .limit(profiles.length * 5)
+
+  // Fallback: if no snapshots older than 1h, use the most recent ones
+  // (happens on the first day of the tournament)
+  const prevSnapshotsSource = (prevSnapshotsRaw?.length)
+    ? prevSnapshotsRaw
+    : (await admin
+        .from('leaderboard_snapshots')
+        .select('user_id, rank')
+        .eq('tournament_id', tournamentId)
+        .order('created_at', { ascending: false })
+        .limit(profiles.length)
+      ).data ?? []
 
   const prevRankMap: Record<string, number> = {}
-  for (const prev of prevSnapshots ?? []) {
+  for (const prev of prevSnapshotsSource) {
     if (!prevRankMap[prev.user_id]) prevRankMap[prev.user_id] = prev.rank
   }
 

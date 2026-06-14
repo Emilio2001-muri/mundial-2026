@@ -26,10 +26,14 @@ export default async function UserProfilePage({ params }: { params: Promise<{ id
     .from('match_predictions')
     .select(matchPredSelect)
     .eq('user_id', id)
-    .order('updated_at', { ascending: true })
     .limit(104)
 
-  const matchPreds = mpData ?? []
+  // Sort by match kickoff so predictions always appear in chronological match order
+  const matchPreds = (mpData ?? []).sort((a, b) => {
+    const aKickoff = (a.match as unknown as { kickoff_at?: string })?.kickoff_at ?? ''
+    const bKickoff = (b.match as unknown as { kickoff_at?: string })?.kickoff_at ?? ''
+    return aKickoff < bKickoff ? -1 : aKickoff > bKickoff ? 1 : 0
+  })
 
   const [{ data: profile }, { data: snapshot }, { data: recentScores }, { data: globalPred }] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', id).single(),

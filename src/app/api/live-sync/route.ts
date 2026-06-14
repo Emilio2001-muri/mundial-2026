@@ -13,9 +13,53 @@ const TOURNAMENT_ID = 'a1b2c3d4-0000-0000-0000-000000000001'
 export async function GET() {
   const admin = createAdminClient()
 
+  // Run catchup FIRST (before any early-return) so recently finished matches
+  // always get their goal events even when no fixtures are currently live.
+  let catchupScored = 0
+  try {
+    const { data: finishedMatches } = await admin
+      .from('matches')
+      .select('id, external_id, home_team_id, away_team_id, home_score, away_score')
+      .eq('tournament_id', TOURNAMENT_ID)
+      .eq('status', 'finished')
+      .not('external_id', 'is', null)
+      .order('kickoff_at', { ascending: false })
+      .limit(20)
+
+    let catchupApiCalls = 0
+    for (const m of finishedMatches ?? []) {
+      if (catchupApiCalls >= 5) break
+      const totalGoals = (m.home_score ?? 0) + (m.away_score ?? 0)
+      if (totalGoals === 0) continue
+
+      const { count } = await admin
+        .from('match_events')
+        .select('id', { count: 'exact', head: true })
+        .eq('match_id', m.id)
+        .in('event_type', ['goal', 'penalty', 'own_goal'])
+
+      // Re-sync if events are missing or fewer than expected goals
+      // (covers player_id=null events that need re-resolution)
+      const eventCount = count ?? 0
+      if (eventCount < totalGoals && m.home_team_id && m.away_team_id) {
+        await syncGoalEvents(admin, m.id, m.external_id!, m.home_team_id, m.away_team_id)
+        catchupApiCalls++
+        // Re-score this match so goalscorer points are awarded
+        try {
+          await doScoreMatch(m.id, admin)
+          catchupScored++
+        } catch (e) {
+          console.error('[live-sync] catchup re-score error', m.id, e)
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[live-sync] catchup events error', e)
+  }
+
   const { fixtures, error } = await fetchLiveFixtures()
-  if (error) return NextResponse.json({ error }, { status: 500 })
-  if (!fixtures.length) return NextResponse.json({ updated: 0, live: false })
+  if (error) return NextResponse.json({ error, catchupScored }, { status: 500 })
+  if (!fixtures.length) return NextResponse.json({ updated: 0, live: false, catchupScored })
 
   // Load all teams by code
   const { data: teams } = await admin.from('teams').select('id, fifa_code')
@@ -96,7 +140,7 @@ export async function GET() {
   // Always recalculate leaderboard so success_rate is never stale
   // (doScoreMatch already does this when matches score, but we need it
   // even when no match scored in this poll to fix old 0% snapshots)
-  if (matchesToScore.length === 0) {
+  if (matchesToScore.length === 0 && catchupScored === 0) {
     try {
       await doRecalculateLeaderboard(TOURNAMENT_ID, admin)
     } catch (e) {
@@ -104,41 +148,9 @@ export async function GET() {
     }
   }
 
-  // Catch-up: sync goal events for recently finished matches that have
-  // no goal events yet — handles matches that finished before the poller
-  // started or where the initial event sync failed.
-  try {
-    const { data: finishedMatches } = await admin
-      .from('matches')
-      .select('id, external_id, home_team_id, away_team_id, home_score, away_score')
-      .eq('tournament_id', TOURNAMENT_ID)
-      .eq('status', 'finished')
-      .not('external_id', 'is', null)
-      .order('kickoff_at', { ascending: false })
-      .limit(10)
-
-    let catchupCount = 0
-    for (const m of finishedMatches ?? []) {
-      if (catchupCount >= 2) break // max 2 API calls per poll (rate limit)
-      const totalGoals = (m.home_score ?? 0) + (m.away_score ?? 0)
-      if (totalGoals === 0) continue // 0-0 match, nothing to sync
-      const { count } = await admin
-        .from('match_events')
-        .select('id', { count: 'exact', head: true })
-        .eq('match_id', m.id)
-        .in('event_type', ['goal', 'penalty', 'own_goal'])
-      if ((count ?? 0) === 0 && m.home_team_id && m.away_team_id) {
-        await syncGoalEvents(admin, m.id, m.external_id!, m.home_team_id, m.away_team_id)
-        catchupCount++
-      }
-    }
-  } catch (e) {
-    console.error('[live-sync] catchup events error', e)
-  }
-
   return NextResponse.json({
     updated,
-    scored: matchesToScore.length,
+    scored: matchesToScore.length + catchupScored,
     total: fixtures.length,
     live: hasLive,
     ts: new Date().toISOString(),
@@ -184,18 +196,44 @@ async function syncGoalEvents(
   function findPlayer(name: string, teamId: string): string | null {
     if (!name) return null
     const n = norm(name)
+    const parts = n.split(' ').filter(Boolean)
+
     // Full name match
     let hit = playerList.find((p) => p.team_id === teamId && norm(p.name) === n)
     if (hit) return hit.id
-    // Last-name match
-    const parts = n.split(' ')
+
+    // Handle abbreviated first name: "b gutierrez" → initial 'b', last name 'gutierrez'
+    // Matches players where last name equals and first name starts with that initial
+    if (parts.length >= 2 && parts[0].length === 1) {
+      const initial = parts[0]
+      const lastName = parts[parts.length - 1]
+      hit = playerList.find((p) => {
+        const pParts = norm(p.name).split(' ').filter(Boolean)
+        return p.team_id === teamId &&
+          pParts[pParts.length - 1] === lastName &&
+          pParts[0].startsWith(initial)
+      })
+      if (hit) return hit.id
+    }
+
+    // Last-name match (last word)
     const lastName = parts[parts.length - 1]
-    hit = playerList.find((p) => p.team_id === teamId && norm(p.name).endsWith(lastName))
-    if (hit) return hit.id
-    // Any significant word in common
+    if (lastName.length > 2) {
+      hit = playerList.find((p) => p.team_id === teamId && norm(p.name).endsWith(lastName))
+      if (hit) return hit.id
+    }
+
+    // Any significant word in common (length > 3)
     hit = playerList.find((p) => {
       const pn = norm(p.name)
       return p.team_id === teamId && parts.some((part) => part.length > 3 && pn.includes(part))
+    })
+    if (hit) return hit.id
+
+    // Last resort: search across all teams (handles team code mismatches from API)
+    hit = playerList.find((p) => {
+      const pn = norm(p.name)
+      return parts.some((part) => part.length > 4 && pn.includes(part))
     })
     return hit?.id ?? null
   }
