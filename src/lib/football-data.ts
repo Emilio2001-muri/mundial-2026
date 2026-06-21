@@ -116,17 +116,17 @@ export async function fetchMatchGoals(externalId: string): Promise<{ goals: Goal
   }
 }
 
-export async function fetchLiveFixtures(): Promise<{ fixtures: FixtureUpdate[]; error?: string }> {
+export async function fetchLiveFixtures(opts?: { noCache?: boolean }): Promise<{ fixtures: FixtureUpdate[]; error?: string }> {
   const apiKey = process.env.FOOTBALL_DATA_API_KEY
   if (!apiKey) {
     return { fixtures: [], error: 'FOOTBALL_DATA_API_KEY no configurada' }
   }
 
   try {
-    const res = await fetch(`${API_BASE}/competitions/${COMPETITION_ID}/matches`, {
-      headers: { 'X-Auth-Token': apiKey },
-      next: { revalidate: 15 }, // Server-side cache: 15s deduplicate across concurrent users
-    })
+    const fetchOpts: RequestInit = opts?.noCache
+      ? { headers: { 'X-Auth-Token': apiKey }, cache: 'no-store' }
+      : { headers: { 'X-Auth-Token': apiKey }, next: { revalidate: 15 } } // 15s cache deduplicates concurrent users
+    const res = await fetch(`${API_BASE}/competitions/${COMPETITION_ID}/matches`, fetchOpts)
     if (!res.ok) {
       const text = await res.text()
       return { fixtures: [], error: `API error ${res.status}: ${text}` }
