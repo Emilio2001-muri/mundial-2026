@@ -79,13 +79,16 @@ export async function GET() {
 
     const { data: match } = await admin
       .from('matches')
-      .select('id, status, home_score, away_score, external_id, kickoff_at')
+      .select('id, status, home_score, away_score, external_id, kickoff_at, score_override')
       .eq('tournament_id', TOURNAMENT_ID)
       .eq('home_team_id', homeId)
       .eq('away_team_id', awayId)
       .maybeSingle()
 
     if (!match) continue
+
+    // Never overwrite scores that an admin manually set.
+    if (match.score_override) continue
 
     const prevHome = match.home_score ?? 0
     const prevAway = match.away_score ?? 0

@@ -27,17 +27,15 @@ export async function GET(request: NextRequest) {
       const day = f.kickoff_utc.slice(0, 10)
       const { data: match } = await admin
         .from('matches')
-        .select('id, status')
+        .select('id, status, score_override')
         .gte('kickoff_at', `${day}T00:00:00Z`)
         .lte('kickoff_at', `${day}T23:59:59Z`)
         .maybeSingle()
 
       if (!match) continue
 
-      // Never overwrite scores for already-finished matches —
-      // the API can report incorrect final scores and the cron
-      // would keep reverting any manual admin fix.
-      if (match.status === 'finished') { updated++; continue }
+      // Never overwrite scores that an admin manually set.
+      if (match.score_override) { updated++; continue }
 
       const { error: updateErr } = await admin
         .from('matches')

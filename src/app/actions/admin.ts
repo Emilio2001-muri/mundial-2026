@@ -88,6 +88,7 @@ export async function updateMatchResult(formDataOrId: FormData | string, homeSco
     home_score: isNaN(homeScore) ? null : homeScore,
     away_score: isNaN(awayScore) ? null : awayScore,
     status,
+    score_override: true,
   }).eq('id', matchId)
   revalidatePath('/admin/matches')
   revalidatePath('/matches')
@@ -230,18 +231,15 @@ export async function syncFixtures(): Promise<{ error?: string; count?: number; 
     // Find existing match by team IDs
     const { data: match } = await admin
       .from('matches')
-      .select('id, status, home_score, away_score')
+      .select('id, status, home_score, away_score, score_override')
       .eq('tournament_id', TOURNAMENT_ID)
       .eq('home_team_id', homeId)
       .eq('away_team_id', awayId)
       .maybeSingle()
 
     if (match) {
-      // Never overwrite scores for already-finished matches:
-      // the API can report incorrect final scores (e.g. 5-0 instead of 4-0)
-      // and a cron/sync would keep reverting any manual admin fix.
-      if (match.status === 'finished') {
-        // Still update external_id / kickoff so metadata stays fresh
+      // Never overwrite scores when an admin has manually set them.
+      if (match.score_override) {
         await admin.from('matches').update({
           external_id: f.external_id,
           kickoff_at: f.kickoff_utc,
