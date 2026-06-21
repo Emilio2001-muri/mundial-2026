@@ -228,14 +228,17 @@ export async function syncFixtures(): Promise<{ error?: string; count?: number; 
     const awayId = teamMap[f.away_code]
     if (!homeId || !awayId) continue
 
-    // Find existing match by team IDs
-    const { data: match } = await admin
+    // Find existing match by team IDs — use limit(1) instead of maybeSingle()
+    // so that if there are accidental duplicates we still get one row back
+    // instead of a PGRST116 error that makes the code fall into the INSERT branch.
+    const { data: rows } = await admin
       .from('matches')
       .select('id, status, home_score, away_score, score_override')
       .eq('tournament_id', TOURNAMENT_ID)
       .eq('home_team_id', homeId)
       .eq('away_team_id', awayId)
-      .maybeSingle()
+      .limit(1)
+    const match = rows?.[0] ?? null
 
     if (match) {
       // Never overwrite scores when an admin has manually set them.
@@ -262,19 +265,9 @@ export async function syncFixtures(): Promise<{ error?: string; count?: number; 
         status: f.status,
       }).eq('id', match.id)
       if (becameFinished || scoreChanged) matchesToScore.push(match.id)
-    } else {
-      // Match not in DB yet — insert it (group stage new entry)
-      await admin.from('matches').insert({
-        tournament_id: TOURNAMENT_ID,
-        phase: 'group',
-        home_team_id: homeId,
-        away_team_id: awayId,
-        kickoff_at: f.kickoff_utc,
-        status: f.status,
-        home_score: f.home_score,
-        away_score: f.away_score,
-      })
     }
+    // Never insert here — syncFixtures only updates, never creates new matches.
+    // Use "Importar desde API" to create matches.
     updated++
   }
 
