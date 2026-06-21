@@ -207,7 +207,8 @@ export async function syncFixtures(): Promise<{ error?: string; count?: number; 
   const admin = createAdminClient()
 
   const { fetchLiveFixtures } = await import('@/lib/football-data')
-  const { fixtures, error } = await fetchLiveFixtures()
+  // noCache: true — admin explicitly requesting fresh data, bypass the 15s server cache
+  const { fixtures, error } = await fetchLiveFixtures({ noCache: true })
 
   if (error) return { error }
   if (!fixtures.length) return { error: 'La API no devolvió partidos. Verifica la clave o el ID de competición (prueba con FOOTBALL_DATA_COMPETITION=2000).' }
@@ -219,6 +220,7 @@ export async function syncFixtures(): Promise<{ error?: string; count?: number; 
 
   const TOURNAMENT_ID = 'a1b2c3d4-0000-0000-0000-000000000001'
   let updated = 0
+  const matchesToScore: string[] = []
 
   for (const f of fixtures) {
     const homeId = teamMap[f.home_code]
@@ -228,15 +230,30 @@ export async function syncFixtures(): Promise<{ error?: string; count?: number; 
     // Find existing match by team IDs
     const { data: match } = await admin
       .from('matches')
-      .select('id')
+      .select('id, status, home_score, away_score')
       .eq('tournament_id', TOURNAMENT_ID)
       .eq('home_team_id', homeId)
       .eq('away_team_id', awayId)
       .maybeSingle()
 
     if (match) {
+      // Never overwrite scores for already-finished matches:
+      // the API can report incorrect final scores (e.g. 5-0 instead of 4-0)
+      // and a cron/sync would keep reverting any manual admin fix.
+      if (match.status === 'finished') {
+        // Still update external_id / kickoff so metadata stays fresh
+        await admin.from('matches').update({
+          external_id: f.external_id,
+          kickoff_at: f.kickoff_utc,
+        }).eq('id', match.id)
+        updated++
+        continue
+      }
+      const becameFinished = f.status === 'finished' && match.status !== 'finished'
+      const scoreChanged = (match.home_score ?? null) !== f.home_score || (match.away_score ?? null) !== f.away_score
       // Update kickoff time AND scores/status
       await admin.from('matches').update({
+        external_id: f.external_id,
         kickoff_at: f.kickoff_utc,
         home_score: f.home_score,
         away_score: f.away_score,
@@ -246,6 +263,7 @@ export async function syncFixtures(): Promise<{ error?: string; count?: number; 
         away_penalties: f.away_penalties,
         status: f.status,
       }).eq('id', match.id)
+      if (becameFinished || scoreChanged) matchesToScore.push(match.id)
     } else {
       // Match not in DB yet — insert it (group stage new entry)
       await admin.from('matches').insert({
@@ -260,6 +278,15 @@ export async function syncFixtures(): Promise<{ error?: string; count?: number; 
       })
     }
     updated++
+  }
+
+  // Recalculate prediction scores for matches that changed/finished
+  if (matchesToScore.length > 0) {
+    const { doScoreMatch, doRecalculateLeaderboard } = await import('@/lib/scoring/compute')
+    for (const matchId of matchesToScore) {
+      try { await doScoreMatch(matchId, admin) } catch (e) { console.error('[syncFixtures] scoring error', matchId, e) }
+    }
+    await doRecalculateLeaderboard(TOURNAMENT_ID, admin)
   }
 
   revalidatePath('/matches')
