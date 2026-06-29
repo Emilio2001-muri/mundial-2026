@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useTransition, useEffect } from 'react'
-import { adminSavePredictionForUser, adminSaveFullPrediction, getMatchPlayersForAdmin } from '@/app/actions/admin'
+import { useState, useTransition } from 'react'
+import { adminSaveFullPrediction } from '@/app/actions/admin'
 import { X, Plus } from 'lucide-react'
 
 interface User {
@@ -71,11 +71,7 @@ export function AdminManualPredictionsClient({ users, matches, players }: Props)
   const [scorers, setScorers] = useState<ScorerEntry[]>([])
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null)
   const [isPending, startTransition] = useTransition()
-  const [players, setPlayers] = useState<{ id: string; name: string; team_id: string; fifa_code: string }[]>([])
-  const [loadingPlayers, setLoadingPlayers] = useState(false)
-  const [scorers, setScorers] = useState<{ player_id: string; player_name: string; fifa_code: string; predicted_goals: number }[]>([])
-  const [selectedPlayerId, setSelectedPlayerId] = useState('')
-  const [selectedGoals, setSelectedGoals] = useState(1)
+
 
   const selectedMatch = matches.find(m => m.id === selectedMatchId) ?? null
 
@@ -95,20 +91,10 @@ export function AdminManualPredictionsClient({ users, matches, players }: Props)
     ? players.filter(p => p.team_id === selectedMatch.away_team_id)
     : []
 
-  const handleMatchChange = async (matchId: string) => {
+  const handleMatchChange = (matchId: string) => {
     setSelectedMatchId(matchId)
     setHomeScore(0)
     setAwayScore(0)
-    setScorers([])
-    setSelectedPlayerId('')
-    setPlayers([])
-    setMessage(null)
-    if (matchId) {
-      setLoadingPlayers(true)
-      const result = await getMatchPlayersForAdmin(matchId)
-      setPlayers(result.players)
-      setLoadingPlayers(false)
-    }
     setScorers([])
     setMessage(null)
   }
@@ -137,12 +123,11 @@ export function AdminManualPredictionsClient({ users, matches, players }: Props)
     setMessage(null)
     startTransition(async () => {
       const result = await adminSaveFullPrediction(selectedUserId, selectedMatchId, homeScore, awayScore, scorers.map(s => ({ player_id: s.player_id, predicted_goals: s.predicted_goals })))
-        selectedUserId,
-        selectedMatchId,
-        homeScore,
-        awayScore,
-        scorers.filter(s => s.player_id)
-      )
+
+
+
+
+
       if (result.error) {
         setMessage({ text: `Error: ${result.error}`, ok: false })
       } else {
@@ -326,69 +311,7 @@ export function AdminManualPredictionsClient({ users, matches, players }: Props)
           </>
         )}
 
-        {/* Goleadores */}
-      {selectedMatchId && (
-        <div className="space-y-3 border-t pt-4">
-          <h3 className="font-semibold text-sm">Goleadores (opcional)</h3>
-          {loadingPlayers && <p className="text-xs text-gray-500">Cargando jugadores…</p>}
-          {players.length > 0 && (
-            <div className="flex gap-2 flex-wrap items-end">
-              <select
-                value={selectedPlayerId}
-                onChange={(e) => setSelectedPlayerId(e.target.value)}
-                className="border rounded px-2 py-1 text-sm flex-1 min-w-0"
-              >
-                <option value="">— Seleccionar jugador —</option>
-                {Array.from(new Set(players.map((p) => p.fifa_code))).map((code) => (
-                  <optgroup key={code} label={code}>
-                    {players.filter((p) => p.fifa_code === code).map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-              <select
-                value={selectedGoals}
-                onChange={(e) => setSelectedGoals(Number(e.target.value))}
-                className="border rounded px-2 py-1 text-sm w-20"
-              >
-                {[1, 2, 3, 4, 5].map((g) => (
-                  <option key={g} value={g}>{g} gol{g > 1 ? 'es' : ''}</option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!selectedPlayerId) return
-                  const player = players.find((p) => p.id === selectedPlayerId)
-                  if (!player) return
-                  setScorers((prev) => {
-                    const existing = prev.find((s) => s.player_id === selectedPlayerId)
-                    if (existing) return prev.map((s) => s.player_id === selectedPlayerId ? { ...s, predicted_goals: selectedGoals } : s)
-                    return [...prev, { player_id: player.id, player_name: player.name, fifa_code: player.fifa_code, predicted_goals: selectedGoals }]
-                  })
-                  setSelectedPlayerId('')
-                  setSelectedGoals(1)
-                }}
-                className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600"
-              >
-                Agregar
-              </button>
-            </div>
-          )}
-          {scorers.length > 0 && (
-            <ul className="space-y-1">
-              {scorers.map((s) => (
-                <li key={s.player_id} className="flex items-center justify-between bg-gray-50 rounded px-2 py-1 text-sm">
-                  <span><span className="font-medium text-xs text-gray-400 mr-1">{s.fifa_code}</span>{s.player_name} — {s.predicted_goals} gol{s.predicted_goals > 1 ? 'es' : ''}</span>
-                  <button type="button" onClick={() => setScorers((prev) => prev.filter((x) => x.player_id !== s.player_id))} className="text-red-500 text-xs ml-2">✕</button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-      {message && (
+        {message && (
           <p className={`text-sm font-medium rounded-lg px-3 py-2 ${
             message.ok
               ? 'bg-green-500/10 text-green-600 dark:text-green-400'
