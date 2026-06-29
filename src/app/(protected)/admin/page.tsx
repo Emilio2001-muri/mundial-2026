@@ -18,11 +18,12 @@ export default async function AdminPage() {
       <h1 className="text-xl font-black">Panel Admin</h1>
       <div className="grid grid-cols-2 gap-3">
         {[
-          { href: '/admin/matches', label: '⚽ Partidos',     desc: 'Actualizar resultados y eventos' },
-          { href: '/admin/awards',  label: '🏆 Premios',      desc: 'Campeón, Balón de Oro, etc.' },
-          { href: '/admin/users',   label: '👥 Usuarios',     desc: 'Gestionar usuarios' },
-          { href: '/admin/scoring', label: '📊 Scoring',      desc: 'Reglas de puntuación' },
-          { href: '/admin/audit',   label: '🗳 Predicciones', desc: 'Borrar comentarios/predicciones' },
+          { href: '/admin/matches',              label: '⚽ Partidos',         desc: 'Actualizar resultados y eventos' },
+          { href: '/admin/awards',               label: '🏆 Premios',          desc: 'Campeón, Balón de Oro, etc.' },
+          { href: '/admin/users',                label: '👥 Usuarios',         desc: 'Gestionar usuarios' },
+          { href: '/admin/scoring',              label: '📊 Scoring',          desc: 'Reglas de puntuación' },
+          { href: '/admin/audit',                label: '🗳 Predicciones',     desc: 'Borrar comentarios/predicciones' },
+          { href: '/admin/predictions-manual',   label: '✏️ Pred. Manuales',  desc: 'Ingresar predicciones de usuarios' },
         ].map(item => (
           <Link key={item.href} href={item.href}
             className="rounded-2xl border border-border bg-card p-4 hover:bg-muted/50 transition-colors">

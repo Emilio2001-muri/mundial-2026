@@ -5,30 +5,47 @@ import { advanceBracket } from '@/lib/bracket-advance'
 import { doScoreMatch, doRecalculateLeaderboard } from '@/lib/scoring/compute'
 
 // Public endpoint called by client-side polling.
-// No caching — always fetches fresh from football-data.org.
+// Cache-Control: 12s so Vercel CDN (and client) share a single response per 12s window,
+// dramatically reducing serverless function executions and Supabase query load.
 export const dynamic = 'force-dynamic'
+
+// Module-level cache — reduces burst load when the same function instance
+// handles multiple concurrent requests within a short window.
+let _cache: { body: unknown; ts: number } | null = null
+const CACHE_MS = 12_000
 
 const TOURNAMENT_ID = 'a1b2c3d4-0000-0000-0000-000000000001'
 
 export async function GET() {
+  const now = Date.now()
+
+  // Serve from module-level cache within the same function instance burst window
+  if (_cache && (now - _cache.ts) < CACHE_MS) {
+    return NextResponse.json(_cache.body, {
+      headers: { 'Cache-Control': 'public, s-maxage=12, stale-while-revalidate=12' },
+    })
+  }
+
   const admin = createAdminClient()
 
-  // Run catchup FIRST (before any early-return) so recently finished matches
-  // always get their goal events even when no fixtures are currently live.
+  // Catchup: re-sync goal events for matches that finished in the last 3 hours
+  // (limited window to reduce unnecessary API calls)
   let catchupScored = 0
   try {
+    const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString()
     const { data: finishedMatches } = await admin
       .from('matches')
       .select('id, external_id, home_team_id, away_team_id, home_score, away_score')
       .eq('tournament_id', TOURNAMENT_ID)
       .eq('status', 'finished')
       .not('external_id', 'is', null)
+      .gte('kickoff_at', threeHoursAgo)
       .order('kickoff_at', { ascending: false })
-      .limit(20)
+      .limit(5)
 
     let catchupApiCalls = 0
     for (const m of finishedMatches ?? []) {
-      if (catchupApiCalls >= 5) break
+      if (catchupApiCalls >= 2) break
       const totalGoals = (m.home_score ?? 0) + (m.away_score ?? 0)
       if (totalGoals === 0) continue
 
@@ -38,13 +55,10 @@ export async function GET() {
         .eq('match_id', m.id)
         .in('event_type', ['goal', 'penalty', 'own_goal'])
 
-      // Re-sync if events are missing or fewer than expected goals
-      // (covers player_id=null events that need re-resolution)
       const eventCount = count ?? 0
       if (eventCount < totalGoals && m.home_team_id && m.away_team_id) {
         await syncGoalEvents(admin, m.id, m.external_id!, m.home_team_id, m.away_team_id)
         catchupApiCalls++
-        // Re-score this match so goalscorer points are awarded
         try {
           await doScoreMatch(m.id, admin)
           catchupScored++
@@ -59,7 +73,13 @@ export async function GET() {
 
   const { fixtures, error } = await fetchLiveFixtures()
   if (error) return NextResponse.json({ error, catchupScored }, { status: 500 })
-  if (!fixtures.length) return NextResponse.json({ updated: 0, live: false, catchupScored })
+  if (!fixtures.length) {
+    const body = { updated: 0, live: false, catchupScored }
+    _cache = { body, ts: Date.now() }
+    return NextResponse.json(body, {
+      headers: { 'Cache-Control': 'public, s-maxage=12, stale-while-revalidate=12' },
+    })
+  }
 
   // Load all teams by code
   const { data: teams } = await admin.from('teams').select('id, fifa_code')
@@ -151,12 +171,16 @@ export async function GET() {
     }
   }
 
-  return NextResponse.json({
+  const body = {
     updated,
     scored: matchesToScore.length + catchupScored,
     total: fixtures.length,
     live: hasLive,
     ts: new Date().toISOString(),
+  }
+  _cache = { body, ts: Date.now() }
+  return NextResponse.json(body, {
+    headers: { 'Cache-Control': 'public, s-maxage=12, stale-while-revalidate=12' },
   })
 }
 

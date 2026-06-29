@@ -499,6 +499,38 @@ export async function syncMatchEvents(matchId: string): Promise<{
   }
 }
 
+// ── Admin: save a prediction on behalf of a user ─────────────────
+// Used when a user sent their prediction privately and the admin needs to enter it.
+export async function adminSavePredictionForUser(
+  targetUserId: string,
+  matchId: string,
+  predictedHomeScore: number,
+  predictedAwayScore: number
+): Promise<{ error?: string }> {
+  await requireAdmin()
+  const admin = createAdminClient()
+
+  const { error } = await admin
+    .from('match_predictions')
+    .upsert(
+      {
+        match_id: matchId,
+        user_id: targetUserId,
+        predicted_home_score: predictedHomeScore,
+        predicted_away_score: predictedAwayScore,
+        status: 'submitted',
+        submitted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'match_id,user_id', ignoreDuplicates: false }
+    )
+
+  if (error) return { error: error.message }
+  revalidatePath('/admin/predictions-manual')
+  revalidatePath('/leaderboard')
+  return {}
+}
+
 // ── Re-score ALL finished matches ────────────────────────────────
 // Regenerates prediction_scores with clean reason text.
 // Safe: skips matches without scores, never touches prediction rows.

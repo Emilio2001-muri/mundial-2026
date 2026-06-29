@@ -7,7 +7,9 @@ import { useRouter } from 'next/navigation'
 // Uses time-based detection: if current time is inside any match window
 // (kickoff_at to kickoff_at + 120 min) we poll aggressively even before
 // the API marks the match as live.
-// Intervals: 10s when confirmed live, 20s when inside time window, 45s otherwise.
+// Intervals: 10s when confirmed live, 20s when inside time window, 120s otherwise.
+// The server caches responses for 12s (Cache-Control s-maxage=12), so polling
+// at 20s means each client causes at most ~1 actual serverless execution per 20s.
 
 const TOURNAMENT_START = new Date('2026-06-11T00:00:00Z')
 const TOURNAMENT_END   = new Date('2026-07-20T00:00:00Z')
@@ -46,17 +48,17 @@ export function LiveScorePoller() {
   // Time-based interval: poll fast during match windows regardless of API status
   const getInterval = () => {
     if (live) return 10_000
-    // Check if we're inside a typical World Cup match time slot
-    // WC 2026 matches kick off at round hours/half hours, last ~2h
-    // Use 20s polling from 5 min before kickoff through 125 min after
+    // Check if we're inside a WC 2026 match time slot (UTC).
+    // Actual R32/R16/QF/SF/Final kickoff slots used in migration 019:
+    // 17:00, 18:00, 19:00, 20:00, 20:30, 21:00, 22:00, 23:00, 01:00
     const nowMin = new Date().getUTCHours() * 60 + new Date().getUTCMinutes()
-    // Common WC kickoff UTC slots: 18:00, 21:00, 00:00 (= 0)
-    const slots = [18 * 60, 21 * 60, 0]
+    const slots = [17 * 60, 18 * 60, 19 * 60, 20 * 60, 20 * 60 + 30, 21 * 60, 22 * 60, 23 * 60, 1 * 60]
     const inWindow = slots.some((slot) => {
       const diff = ((nowMin - slot) % 1440 + 1440) % 1440
       return diff <= 130 // within 130 min after kickoff
     })
-    return inWindow ? 20_000 : 45_000
+    // 20s during match window, 2 min when idle (server caches 12s so this is fine)
+    return inWindow ? 20_000 : 120_000
   }
 
   useEffect(() => {
