@@ -14,7 +14,7 @@ export default async function AdminManualPredictionsPage() {
 
   const admin = createAdminClient()
 
-  const [{ data: users }, { data: matches }] = await Promise.all([
+  const [{ data: users }, { data: matches }, { data: players }] = await Promise.all([
     admin
       .from('profiles')
       .select('id, display_name')
@@ -23,13 +23,18 @@ export default async function AdminManualPredictionsPage() {
       .from('matches')
       .select(`
         id, match_number, phase, kickoff_at, status,
+        home_team_id, away_team_id,
         home_placeholder, away_placeholder,
-        home_team:teams!matches_home_team_id_fkey(fifa_code),
-        away_team:teams!matches_away_team_id_fkey(fifa_code)
+        home_team:teams!matches_home_team_id_fkey(id, fifa_code),
+        away_team:teams!matches_away_team_id_fkey(id, fifa_code)
       `)
-      // Show all knockout + recent group matches sorted by number
       .neq('phase', 'group')
       .order('match_number'),
+    admin
+      .from('players')
+      .select('id, team_id, name, position, shirt_number')
+      .eq('active', true)
+      .order('name'),
   ])
 
   return (
@@ -37,6 +42,8 @@ export default async function AdminManualPredictionsPage() {
       users={(users ?? []) as { id: string; display_name: string | null }[]}
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       matches={(matches ?? []) as any[]}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      players={(players ?? []) as any[]}
     />
   )
 }

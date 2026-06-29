@@ -505,12 +505,13 @@ export async function adminSavePredictionForUser(
   targetUserId: string,
   matchId: string,
   predictedHomeScore: number,
-  predictedAwayScore: number
+  predictedAwayScore: number,
+  scorerPredictions: Array<{ player_id: string; predicted_goals: number }> = []
 ): Promise<{ error?: string }> {
   await requireAdmin()
   const admin = createAdminClient()
 
-  const { error } = await admin
+  const { data: prediction, error } = await admin
     .from('match_predictions')
     .upsert(
       {
@@ -524,8 +525,108 @@ export async function adminSavePredictionForUser(
       },
       { onConflict: 'match_id,user_id', ignoreDuplicates: false }
     )
+    .select('id')
+    .single()
 
   if (error) return { error: error.message }
+  if (!prediction) return { error: 'No se pudo crear la predicción.' }
+
+  // Replace scorer predictions
+  await admin.from('scorer_predictions').delete().eq('match_prediction_id', prediction.id)
+
+  if (scorerPredictions.length > 0) {
+    const { error: scorerError } = await admin.from('scorer_predictions').insert(
+      scorerPredictions.map((sp) => ({
+        match_prediction_id: prediction.id,
+        player_id: sp.player_id,
+        predicted_goals: sp.predicted_goals,
+      }))
+    )
+    if (scorerError) return { error: scorerError.message }
+  }
+
+  revalidatePath('/admin/predictions-manual')
+  revalidatePath('/leaderboard')
+  return {}
+}
+
+// ── Admin: get players for both teams in a match ──────────────────
+export async function getMatchPlayersForAdmin(
+  matchId: string
+): Promise<{ players: { id: string; name: string; team_id: string; fifa_code: string }[]; error?: string }> {
+  await requireAdmin()
+  const admin = createAdminClient()
+
+  const { data: match } = await admin
+    .from('matches')
+    .select('home_team_id, away_team_id')
+    .eq('id', matchId)
+    .maybeSingle()
+
+  if (!match?.home_team_id || !match?.away_team_id) {
+    return { players: [], error: 'Partido sin equipos asignados todavía.' }
+  }
+
+  const { data: players } = await admin
+    .from('players')
+    .select('id, name, team_id, team:teams!players_team_id_fkey(fifa_code)')
+    .in('team_id', [match.home_team_id, match.away_team_id])
+    .order('name')
+
+  return {
+    players: (players ?? []).map((p) => ({
+      id: p.id,
+      name: p.name,
+      team_id: p.team_id,
+      fifa_code: (p.team as unknown as { fifa_code: string } | null)?.fifa_code ?? '',
+    })),
+  }
+}
+
+// ── Admin: save prediction + scorers for any user ─────────────────
+export async function adminSaveFullPrediction(
+  targetUserId: string,
+  matchId: string,
+  predictedHomeScore: number,
+  predictedAwayScore: number,
+  scorers: { player_id: string; predicted_goals: number }[]
+): Promise<{ error?: string }> {
+  await requireAdmin()
+  const admin = createAdminClient()
+
+  const { data: prediction, error } = await admin
+    .from('match_predictions')
+    .upsert(
+      {
+        match_id: matchId,
+        user_id: targetUserId,
+        predicted_home_score: predictedHomeScore,
+        predicted_away_score: predictedAwayScore,
+        status: 'submitted',
+        submitted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'match_id,user_id', ignoreDuplicates: false }
+    )
+    .select('id')
+    .single()
+
+  if (error) return { error: error.message }
+  if (!prediction) return { error: 'No se pudo guardar la predicción.' }
+
+  await admin.from('scorer_predictions').delete().eq('match_prediction_id', prediction.id)
+  if (scorers.length > 0) {
+    const { error: scorerError } = await admin.from('scorer_predictions').insert(
+      scorers.map((s) => ({
+        match_prediction_id: prediction.id,
+        player_id: s.player_id,
+        predicted_goals: s.predicted_goals,
+        created_at: new Date().toISOString(),
+      }))
+    )
+    if (scorerError) return { error: `Predicción guardada pero error en goleadores: ${scorerError.message}` }
+  }
+
   revalidatePath('/admin/predictions-manual')
   revalidatePath('/leaderboard')
   return {}
