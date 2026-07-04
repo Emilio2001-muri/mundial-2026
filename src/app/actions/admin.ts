@@ -70,9 +70,10 @@ export async function relockMatchPrediction(formData: FormData) {
 
 // ── Update match result ──────────────────────────────────────────
 // Accepts both FormData (server action) and (matchId, home, away) (client call)
-export async function updateMatchResult(formDataOrId: FormData | string, homeScoreArg?: number, awayScoreArg?: number): Promise<{ error?: string }> {
+export async function updateMatchResult(formDataOrId: FormData | string, homeScoreArg?: number, awayScoreArg?: number, winnerTeamIdArg?: string | null): Promise<{ error?: string }> {
   const supabase = await requireAdmin()
   let matchId: string, homeScore: number, awayScore: number, status: string
+  let winnerTeamId: string | null | undefined = winnerTeamIdArg
   if (typeof formDataOrId === 'string') {
     matchId = formDataOrId
     homeScore = homeScoreArg ?? 0
@@ -83,13 +84,28 @@ export async function updateMatchResult(formDataOrId: FormData | string, homeSco
     homeScore = parseInt(formDataOrId.get('home_score') as string, 10)
     awayScore = parseInt(formDataOrId.get('away_score') as string, 10)
     status = formDataOrId.get('status') as string
+    const w = formDataOrId.get('winner_team_id')
+    winnerTeamId = w === null || w === '' ? undefined : (w as string)
   }
-  const { error } = await supabase.from('matches').update({
+
+  const update: Record<string, unknown> = {
     home_score: isNaN(homeScore) ? null : homeScore,
     away_score: isNaN(awayScore) ? null : awayScore,
     status,
     score_override: true,
-  }).eq('id', matchId)
+  }
+
+  // Winner designation only matters when the regular-time score is a draw
+  // (knockout tie decided by penalties). For decisive scores the winner is
+  // implied by the goals, so we clear any stale designation.
+  const isDraw = !isNaN(homeScore) && !isNaN(awayScore) && homeScore === awayScore
+  if (winnerTeamId !== undefined) {
+    update.winner_team_id = isDraw ? (winnerTeamId || null) : null
+  } else if (!isDraw) {
+    update.winner_team_id = null
+  }
+
+  const { error } = await supabase.from('matches').update(update).eq('id', matchId)
   revalidatePath('/admin/matches')
   revalidatePath('/matches')
   revalidatePath('/bracket')

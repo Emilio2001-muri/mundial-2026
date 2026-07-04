@@ -165,6 +165,17 @@ export function scoreMatchPrediction(
   const homeLabel = opts?.homeCode ?? 'Local'
   const awayLabel = opts?.awayCode ?? 'Visitante'
 
+  // Determine the actual winner. In knockout ties decided by penalties the
+  // regular-time score is a draw, but an admin can designate the advancing
+  // team via winner_team_id. In that case the "ganador correcto" points go to
+  // whoever predicted that team to win.
+  let actualWinner: 'home' | 'away' | 'draw' =
+    actualHome > actualAway ? 'home' : actualAway > actualHome ? 'away' : 'draw'
+  if (actualWinner === 'draw' && match.winner_team_id) {
+    if (match.winner_team_id === match.home_team_id) actualWinner = 'home'
+    else if (match.winner_team_id === match.away_team_id) actualWinner = 'away'
+  }
+
   if (predHome === actualHome && predAway === actualAway) {
     const pts = getRulePoints(rules, SCORING_KEYS.EXACT_SCORE)
     items.push({
@@ -175,8 +186,6 @@ export function scoreMatchPrediction(
 
     // Exact score implies correct winner — add winner points too
     const winnerPts = getRulePoints(rules, SCORING_KEYS.CORRECT_WINNER)
-    const actualWinner =
-      actualHome > actualAway ? 'home' : actualAway > actualHome ? 'away' : 'draw'
     const predWinner =
       predHome! > predAway! ? 'home' : predAway! > predHome! ? 'away' : 'draw'
     if (actualWinner === predWinner) {
@@ -188,8 +197,6 @@ export function scoreMatchPrediction(
     }
   } else if (predHome !== null && predAway !== null) {
     // ── Correct winner / draw ──────────────────
-    const actualWinner =
-      actualHome > actualAway ? 'home' : actualAway > actualHome ? 'away' : 'draw'
     const predWinner =
       predHome > predAway ? 'home' : predAway > predHome ? 'away' : 'draw'
 

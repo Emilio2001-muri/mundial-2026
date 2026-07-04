@@ -164,7 +164,7 @@ describe('scoreMatchPrediction', () => {
   })
 
   it('awards draw points when both predict and actual are draw', () => {
-    const match = makeMatch({ home_score: 1, away_score: 1 })
+    const match = makeMatch({ home_score: 1, away_score: 1, winner_team_id: null })
     const pred = makePrediction({ predicted_home_score: 1, predicted_away_score: 1 })
     const result = scoreMatchPrediction(match, pred, [], [], RULES)
     expect(result.total_points).toBe(5) // exact(3) + winner(2)
@@ -188,6 +188,48 @@ describe('scoreMatchPrediction', () => {
     const pred = makePrediction()
     const result = scoreMatchPrediction(match, pred, [], [], RULES)
     expect(result.total_points).toBe(0)
+  })
+})
+
+// ── knockout ties decided by penalties ────────────────────────────
+describe('scoreMatchPrediction — penalty-decided ties', () => {
+  it('awards winner points to who predicted the penalty winner (home)', () => {
+    // 1-1 draw, home advanced on penalties → winner_team_id = home
+    const match = makeMatch({ home_score: 1, away_score: 1, phase: 'round_of_16', winner_team_id: TEAM_HOME })
+    const pred = makePrediction({ predicted_home_score: 2, predicted_away_score: 1 })
+    const result = scoreMatchPrediction(match, pred, [], [], RULES)
+    expect(result.total_points).toBe(2) // only correct_winner
+    const winner = result.items.find((i) => i.category === 'correct_winner')
+    expect(winner?.points).toBe(2)
+  })
+
+  it('awards winner points to who predicted the penalty winner (away)', () => {
+    const match = makeMatch({ home_score: 2, away_score: 2, phase: 'quarter_final', winner_team_id: TEAM_AWAY })
+    const pred = makePrediction({ predicted_home_score: 0, predicted_away_score: 1 })
+    const result = scoreMatchPrediction(match, pred, [], [], RULES)
+    expect(result.total_points).toBe(2)
+  })
+
+  it('gives 0 winner points to who predicted the losing side of a penalty tie', () => {
+    const match = makeMatch({ home_score: 1, away_score: 1, phase: 'round_of_16', winner_team_id: TEAM_AWAY })
+    const pred = makePrediction({ predicted_home_score: 2, predicted_away_score: 1 })
+    const result = scoreMatchPrediction(match, pred, [], [], RULES)
+    expect(result.total_points).toBe(0)
+  })
+
+  it('exact draw score still scores 3 but no winner bonus when a penalty winner is set', () => {
+    const match = makeMatch({ home_score: 1, away_score: 1, phase: 'round_of_16', winner_team_id: TEAM_HOME })
+    const pred = makePrediction({ predicted_home_score: 1, predicted_away_score: 1 })
+    const result = scoreMatchPrediction(match, pred, [], [], RULES)
+    expect(result.total_points).toBe(3) // exact only, predicted a draw
+    expect(result.items.some((i) => i.category === 'correct_winner' && i.points > 0)).toBe(false)
+  })
+
+  it('still treats it as a real draw when no winner_team_id is set', () => {
+    const match = makeMatch({ home_score: 1, away_score: 1, phase: 'round_of_16', winner_team_id: null })
+    const pred = makePrediction({ predicted_home_score: 0, predicted_away_score: 0 })
+    const result = scoreMatchPrediction(match, pred, [], [], RULES)
+    expect(result.total_points).toBe(2) // predicted draw, actual draw → winner points
   })
 })
 
