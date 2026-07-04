@@ -106,10 +106,41 @@ export async function updateMatchResult(formDataOrId: FormData | string, homeSco
   }
 
   const { error } = await supabase.from('matches').update(update).eq('id', matchId)
+  if (error) return { error: error.message }
+
+  // Propagate the result through the knockout bracket (promote/repair the
+  // teams in the next round). Uses the service-role client so it can write
+  // regardless of RLS.
+  try {
+    const admin = createAdminClient()
+    const { advanceBracket } = await import('@/lib/bracket-advance')
+    await advanceBracket(admin)
+  } catch (e) {
+    console.error('[updateMatchResult] advanceBracket error', e)
+  }
+
   revalidatePath('/admin/matches')
   revalidatePath('/matches')
   revalidatePath('/bracket')
-  if (error) return { error: error.message }
+  return {}
+}
+
+// ── Re-advance the knockout bracket from finished results ────────
+// Recomputes which teams occupy each knockout slot based on the current
+// finished results (respecting winner_team_id for penalty-decided ties).
+// Does NOT touch scores — safe to run any time to repair the bracket.
+export async function readvanceBracket(): Promise<{ error?: string }> {
+  await requireAdmin()
+  try {
+    const admin = createAdminClient()
+    const { advanceBracket } = await import('@/lib/bracket-advance')
+    await advanceBracket(admin)
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Error al recalcular el cuadro' }
+  }
+  revalidatePath('/admin/matches')
+  revalidatePath('/matches')
+  revalidatePath('/bracket')
   return {}
 }
 

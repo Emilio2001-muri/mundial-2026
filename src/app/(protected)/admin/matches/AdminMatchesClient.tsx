@@ -6,11 +6,11 @@ import type { Match, Team, Venue } from '@/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { updateMatchResult, rebuildMatchesFromAPI, syncFixtures } from '@/app/actions/admin'
+import { updateMatchResult, rebuildMatchesFromAPI, syncFixtures, readvanceBracket } from '@/app/actions/admin'
 import { recalculateMatchScores } from '@/app/actions/scoring'
 import { phaseLabel } from '@/lib/utils'
 import { ClientTime } from '@/components/ui/ClientTime'
-import { Edit, RefreshCw, Check, X, AlertTriangle, CheckCircle2, DatabaseZap, Goal, Trophy } from 'lucide-react'
+import { Edit, RefreshCw, Check, X, AlertTriangle, CheckCircle2, DatabaseZap, Goal, Trophy, GitBranch } from 'lucide-react'
 
 interface AdminMatchesClientProps {
   matches: (Match & { home_team?: { fifa_code: string } | null; away_team?: { fifa_code: string } | null })[]
@@ -26,6 +26,7 @@ export function AdminMatchesClient({ matches }: AdminMatchesClientProps) {
   const [isPending, startTransition] = useTransition()
   const [isSyncing, startSync] = useTransition()
   const [isRebuilding, startRebuild] = useTransition()
+  const [isReadvancing, startReadvance] = useTransition()
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null)
 
   const handleRebuild = () => {
@@ -50,6 +51,18 @@ export function AdminMatchesClient({ matches }: AdminMatchesClientProps) {
         setMessage({ text: `Error sync: ${res.error}`, ok: false })
       } else {
         setMessage({ text: `✅ ${res.updated} marcadores actualizados de ${res.count} partidos.`, ok: true })
+      }
+    })
+  }
+
+  const handleReadvance = () => {
+    setMessage(null)
+    startReadvance(async () => {
+      const res = await readvanceBracket()
+      if (res.error) {
+        setMessage({ text: `Error: ${res.error}`, ok: false })
+      } else {
+        setMessage({ text: '✅ Cuadro recalculado: los ganadores avanzaron a la siguiente ronda.', ok: true })
       }
     })
   }
@@ -113,6 +126,19 @@ export function AdminMatchesClient({ matches }: AdminMatchesClientProps) {
       </div>
       <p className="text-[11px] text-muted-foreground px-1">
         "Importar desde API" reconstruye todos los partidos de grupos con los equipos y horarios reales del Mundial 2026. "Actualizar marcadores" sincroniza goles y estado en vivo.
+      </p>
+
+      <Button
+        variant="outline"
+        onClick={handleReadvance}
+        loading={isReadvancing}
+        className="w-full flex items-center gap-2 text-sm"
+      >
+        <GitBranch className="w-4 h-4" />
+        Recalcular cuadro (avanzar ganadores)
+      </Button>
+      <p className="text-[11px] text-muted-foreground px-1">
+        Recorre los resultados finalizados y coloca al ganador de cada llave en la siguiente ronda. Úsalo si un equipo quedó mal en el cuadro. Para empates definidos por penales, primero edita el partido y elige el ganador.
       </p>
 
       {message && (

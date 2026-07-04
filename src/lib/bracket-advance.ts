@@ -82,7 +82,7 @@ async function isGroupComplete(admin: SupabaseClient, groupName: string): Promis
 async function getKOMatch(admin: SupabaseClient, matchNumber: number) {
   const { data } = await admin
     .from('matches')
-    .select('id, home_team_id, away_team_id, status')
+    .select('id, home_team_id, away_team_id, status, home_score, away_score, home_penalties, away_penalties, winner_team_id')
     .eq('tournament_id', TOURNAMENT_ID)
     .eq('match_number', matchNumber)
     .maybeSingle()
@@ -100,9 +100,12 @@ async function promoteTeams(
   if (!m) return
   if (m.status === 'finished') return // don't overwrite played matches
 
+  // Set or correct the slot. We overwrite when the incoming (winner) team
+  // differs from what's currently there so that fixing an upstream result
+  // repairs the downstream bracket. Finished matches are never touched.
   const update: Record<string, string | null> = {}
-  if (homeId && !m.home_team_id) update.home_team_id = homeId
-  if (awayId && !m.away_team_id) update.away_team_id = awayId
+  if (homeId && m.home_team_id !== homeId) update.home_team_id = homeId
+  if (awayId && m.away_team_id !== awayId) update.away_team_id = awayId
   if (Object.keys(update).length === 0) return
 
   await admin.from('matches').update(update).eq('id', m.id)
@@ -209,13 +212,26 @@ async function advanceLosers(admin: SupabaseClient, nums: [number,number], targe
   if (l1 || l2) await promoteTeams(admin, target, l1, l2)
 }
 
-type KOMatch = { home_team_id: string; away_team_id: string; home_score?: number | null; away_score?: number | null; home_penalties?: number | null; away_penalties?: number | null }
-function getWinner(m: KOMatch): string {
-  if (m.home_penalties != null) return m.home_penalties > (m.away_penalties ?? 0) ? m.home_team_id : m.away_team_id
-  return (m.home_score ?? 0) >= (m.away_score ?? 0) ? m.home_team_id : m.away_team_id
+type KOMatch = { home_team_id: string; away_team_id: string; home_score?: number | null; away_score?: number | null; home_penalties?: number | null; away_penalties?: number | null; winner_team_id?: string | null }
+
+// Determine the team that advances from a knockout match.
+// Priority: admin-designated winner (penalty shootout on a draw) →
+// penalty scores → regular/extra-time score. A draw with no designated
+// winner is unresolved and returns null (never defaults to the home team).
+function getWinner(m: KOMatch): string | null {
+  if (m.winner_team_id) return m.winner_team_id
+  if (m.home_penalties != null && m.away_penalties != null && m.home_penalties !== m.away_penalties) {
+    return m.home_penalties > m.away_penalties ? m.home_team_id : m.away_team_id
+  }
+  const hs = m.home_score, as = m.away_score
+  if (hs != null && as != null && hs !== as) {
+    return hs > as ? m.home_team_id : m.away_team_id
+  }
+  return null
 }
-function getLoser(m: KOMatch): string {
-  if (m.home_penalties != null) return m.home_penalties > (m.away_penalties ?? 0) ? m.away_team_id : m.home_team_id
-  return (m.home_score ?? 0) >= (m.away_score ?? 0) ? m.away_team_id : m.home_team_id
+function getLoser(m: KOMatch): string | null {
+  const winner = getWinner(m)
+  if (!winner) return null
+  return winner === m.home_team_id ? m.away_team_id : m.home_team_id
 }
 
